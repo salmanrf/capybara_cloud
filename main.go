@@ -12,7 +12,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
+	"github.com/salmanrf/capybara-cloud/api/routes"
 	"github.com/salmanrf/capybara-cloud/internal/database"
+	"github.com/salmanrf/capybara-cloud/internal/organization"
 	"github.com/salmanrf/capybara-cloud/pkg/auth"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
@@ -47,6 +49,10 @@ func setup() (context.Context, *pgx.Conn, error) {
 func create_router(ctx context.Context, queries *database.Queries) *http.ServeMux {
 	mux := http.NewServeMux()
 
+	org_service := organization.NewService(ctx, queries)
+
+	routes.SetupOrganizationRouter(mux, org_service)
+	
 	mux.HandleFunc("GET /api/auth/me", func(w http.ResponseWriter, r *http.Request) {
 		sid_cookie, err := r.Cookie("sid")
 
