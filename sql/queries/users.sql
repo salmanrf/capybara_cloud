@@ -6,7 +6,8 @@ INSERT INTO "users" (
   username,
   email,
   full_name,
+  hashed_password,
   role
 ) VALUES (
-$1, $2, $3, $4
+$1, $2, $3, $4, $5
 ) RETURNING *;
