@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
-	"github.com/salmanrf/capybara-cloud/api/routes"
+	"github.com/salmanrf/capybara-cloud/api"
 	"github.com/salmanrf/capybara-cloud/internal/auth"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/internal/organization"
@@ -42,19 +42,6 @@ func setup() (context.Context, *pgx.Conn, error) {
 	return ctx, conn, nil
 }
 
-func create_router(ctx context.Context, queries *database.Queries) *http.ServeMux {
-	mux := http.NewServeMux()
-
-	user_service := user.NewService(ctx, queries)
-	auth_service := auth.NewService(ctx, user_service)
-	org_service := organization.NewService(ctx, queries, user_service)
-
-	routes.SetupAuthRouter(mux, auth_service, user_service)
-	routes.SetupOrganizationRouter(mux, org_service)
-	
-	return mux
-}
-
 func main() {
 	ctx, db_conn, err := setup()
 	defer db_conn.Close(ctx)
@@ -66,13 +53,12 @@ func main() {
 	}
 
 	queries := database.New(db_conn)
-
-	mux := create_router(ctx, queries)
-	server := http.Server{
-		Addr: ":" + "8080",
-		Handler: mux,
-	}
-	fmt.Println("Setup completed successfully")
-
-	server.ListenAndServe()
+	user_service := user.NewService(ctx, queries)
+	auth_service := auth.NewService(ctx, user_service)
+	org_service := organization.NewService(ctx, queries, user_service)
+	
+	api_server := api.NewAPIServer(ctx, user_service, auth_service, org_service)
+	
+	api_port := os.Getenv("API_PORT")
+	http.ListenAndServe(fmt.Sprintf(":%s", api_port), api_server)
 }

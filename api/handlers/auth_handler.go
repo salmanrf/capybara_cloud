@@ -61,12 +61,14 @@ func SignupHandler(as auth_module.Service, us user.Service) http.HandlerFunc {
 
 		decoder := json.NewDecoder(r.Body)
 		if err := decoder.Decode(&body); err != nil {
+			fmt.Println("Signup failed, parsing", err.Error())
 			utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
 			return
 		}
 
 		_, err := body.Validate()
 		if err != nil {
+			fmt.Println("Signup failed, validation", err.Error())
 			utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 			return
 		}
@@ -74,12 +76,13 @@ func SignupHandler(as auth_module.Service, us user.Service) http.HandlerFunc {
 		existing, err := us.FindById(body.Email, true)
 
 		if err != nil {
-			fmt.Println("Singup failed", err)
+			fmt.Println("Singup failed", err.Error())
 			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
 			return
 		}
 
 		if existing != nil {
+			fmt.Println("Signup failed, user already exists")
 			utils.ResponseWithError(w, http.StatusBadRequest, nil, "This user already exists")
 			return
 		}
