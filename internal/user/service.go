@@ -30,8 +30,6 @@ func NewService(ctx context.Context, q *database.Queries) Service {
 }
 
 func (s *service) FindById(identifier string, is_email bool) (*database.User, error) {
-	fmt.Println("Input user_id", identifier)
-
 	var user database.User
 	var err error
 	
@@ -41,10 +39,7 @@ func (s *service) FindById(identifier string, is_email bool) (*database.User, er
 		user_uuid := pgtype.UUID{}
 		user_uuid.Scan(identifier)
 
-		fmt.Println("UUID", user_uuid)
-		fmt.Println("UUID VALUE", user_uuid.String())
-		
-		user, err = s.queries.FindOneUserByEmailOrId(s.ctx, user_uuid)
+		user, err = s.queries.FindOneUserById(s.ctx, user_uuid)
 	}
 
 	if err != nil {
