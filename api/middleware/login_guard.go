@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/salmanrf/capybara-cloud/pkg/auth"
+	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
-func LoginGuard(next http.Handler) http.HandlerFunc {
+func LoginGuard(validator auth_utils.JWT,  next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sid_cookie, err := r.Cookie("sid")
 		if err != nil {
@@ -24,7 +24,7 @@ func LoginGuard(next http.Handler) http.HandlerFunc {
 			return 
 		}
 
-		sub, err := auth.ValidateJWT(sid_cookie.Value, os.Getenv("AUTH_JWT_SECRET"))
+		sub, err := validator.ValidateJWT(sid_cookie.Value, os.Getenv("AUTH_JWT_SECRET"))
 		if err != nil {
 			fmt.Println("LoginGuard check failed", err.Error())
 			utils.ResponseWithError(

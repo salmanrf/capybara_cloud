@@ -36,6 +36,15 @@ func (dto *CreateOrgDto) Validate() (bool, error) {
 	return valid, validation_errors
 } 
 
+func NewGetOneOrgResponse(row database.FindOneOrganizationByIdRow) *ListMyOrgEntryOrg {
+	return &ListMyOrgEntryOrg{
+		OrgID: row.OrgID.String(),
+		Name: row.Name.String,
+		CreatedAt: row.CreatedAt.Time.String(),
+		UpdatedAt: row.UpdatedAt.Time.String(),
+	}
+}
+
 func NewListMyOrgResponse(dbrows []database.FindOrganizationsForUserRow) []ListMyOrgEntry {
 	size := len(dbrows)
 	formatted := make([]ListMyOrgEntry, size)
