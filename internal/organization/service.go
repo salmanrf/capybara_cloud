@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/internal/database"
@@ -13,6 +14,10 @@ import (
 
 type Service interface {
 	Create(user_id string, org_name string) (*database.Organization, error)
+	UpdateOne(dto *database.FindOneOrganizationByIdAndRoleRow) (*database.Organization, error)
+	DeleteOne(org_id string) error
+	FindById(user_id string, org_id string) (*database.FindOneOrganizationByIdRow, error)
+	FindByIdAndRole(user_id string, org_id string, roles []string) (*database.FindOneOrganizationByIdAndRoleRow, error)
 	ListMyOrgs(user_id string) ([]database.FindOrganizationsForUserRow, error)
 }
 
@@ -59,6 +64,83 @@ func (s *service) Create(user_id string, org_name  string) (*database.Organizati
 	}
 	
 	return &organization, nil
+}
+
+func (s *service) UpdateOne(dto *database.FindOneOrganizationByIdAndRoleRow) (*database.Organization, error) {
+	updated_at := pgtype.Timestamp{
+		Time: time.Now(),
+		Valid: true,
+	}
+	
+	organization, err := s.queries.UpdateOneOrganization(s.ctx, database.UpdateOneOrganizationParams{
+		OrgID: dto.OrgID,
+		Name: dto.Name.String,
+		UpdatedAt: updated_at,
+	})
+
+	if err != nil {
+		fmt.Println("Error updating organization", organization.OrgID.String(), organization.Name, err)
+		return nil, err
+	}
+
+	return &organization, nil
+}
+
+func (s *service) DeleteOne(org_id string) error {
+	org_uuid := pgtype.UUID{}
+	org_uuid.Scan(org_id)
+
+	err := s.queries.DeleteOneOrganization(s.ctx, org_uuid)
+
+	return err
+}
+
+func (s *service) FindById(user_id string, org_id string) (*database.FindOneOrganizationByIdRow, error) {
+	org_uuid := pgtype.UUID{}
+	org_uuid.Scan(org_id)
+	user_uuid := pgtype.UUID{}
+	user_uuid.Scan(user_id)
+
+	org_res, err := s.queries.FindOneOrganizationById(s.ctx, database.FindOneOrganizationByIdParams{
+		OrgID: org_uuid,
+		UserID: user_uuid,
+	})
+
+	if err != nil {
+		err_msg := err.Error()
+			if strings.Contains(err_msg, "no rows") {
+				return nil, nil
+			} else {
+				fmt.Println("Error finding organization", err_msg)
+				return nil, errors.New("unable to find organization")
+			}
+	}
+
+	return &org_res, nil
+}
+
+func (s *service) FindByIdAndRole(user_id string, org_id string, roles []string) (*database.FindOneOrganizationByIdAndRoleRow, error) {
+	org_uuid := pgtype.UUID{}
+	org_uuid.Scan(org_id)
+	user_uuid := pgtype.UUID{}
+	user_uuid.Scan(user_id)
+
+	org_res, err := s.queries.FindOneOrganizationByIdAndRole(s.ctx, database.FindOneOrganizationByIdAndRoleParams{
+		OrgID: org_uuid,
+		UserID: user_uuid,
+	})
+
+	if err != nil {
+		err_msg := err.Error()
+			if strings.Contains(err_msg, "no rows") {
+				return nil, nil
+			} else {
+				fmt.Println("Error finding user", err_msg)
+				return nil, errors.New("unable to find user")
+			}
+	}
+
+	return &org_res, nil
 }
 
 func (s *service) ListMyOrgs(user_id string) ([]database.FindOrganizationsForUserRow, error) {

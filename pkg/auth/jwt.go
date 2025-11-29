@@ -7,7 +7,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func MakeJWT(user_id pgtype.UUID, jwt_secret string, expires_in time.Duration) (string, error) {
+type auth_utils struct {
+	jwt_secret string
+}
+
+type JWT interface {
+	MakeJWT(user_id pgtype.UUID, jwt_secret string, expires_in time.Duration) (string, error)
+	ValidateJWT(token string, jwt_secret string) (string, error)
+}
+
+func NewJWTUtils(jwt_secret string) JWT {
+	return &auth_utils{jwt_secret}
+}
+
+func (auth *auth_utils) MakeJWT(user_id pgtype.UUID, jwt_secret string, expires_in time.Duration) (string, error) {
 	token := jwt.NewWithClaims(
 		jwt.SigningMethodHS256, 
 		jwt.RegisteredClaims{
@@ -28,7 +41,7 @@ func MakeJWT(user_id pgtype.UUID, jwt_secret string, expires_in time.Duration) (
 	return signed_jwt, nil
 }
 
-func ValidateJWT(token string, jwt_secret string) (string, error) {
+func (auth *auth_utils) ValidateJWT(token string, jwt_secret string) (string, error) {
 	claims := jwt.RegisteredClaims{}
 	
 	_, err := jwt.ParseWithClaims(

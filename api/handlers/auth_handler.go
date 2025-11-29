@@ -14,7 +14,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
-func GetMeHandler(as auth_module.Service, us user.Service) http.HandlerFunc {
+func GetMeHandler(as auth_module.Service, us user.Service, jwt_utils auth_utils.JWT) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sid_cookie, err := r.Cookie("sid")
 
@@ -24,7 +24,7 @@ func GetMeHandler(as auth_module.Service, us user.Service) http.HandlerFunc {
 			return
 		}
 
-		sub, err := auth_utils.ValidateJWT(sid_cookie.Value, os.Getenv("AUTH_JWT_SECRET"))
+		sub, err := jwt_utils.ValidateJWT(sid_cookie.Value, os.Getenv("AUTH_JWT_SECRET"))
 
 		if err != nil {
 			fmt.Println("Error validating session JWT", err.Error())	
@@ -98,7 +98,7 @@ func SignupHandler(as auth_module.Service, us user.Service) http.HandlerFunc {
 	}
 }
 
-func SigninHandler(us user.Service) http.HandlerFunc {
+func SigninHandler(us user.Service, jwt_utils auth_utils.JWT) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body dto.SigninDto 
 
@@ -144,7 +144,7 @@ func SigninHandler(us user.Service) http.HandlerFunc {
 			return
 		}
 
-		jwt_string, err := auth_utils.MakeJWT(user.UserID, os.Getenv("AUTH_JWT_SECRET"), time.Hour * 24) 
+		jwt_string, err := jwt_utils.MakeJWT(user.UserID, os.Getenv("AUTH_JWT_SECRET"), time.Hour * 24) 
 
 		if err != nil {
 			fmt.Println("Error building jwt for signin", err.Error())

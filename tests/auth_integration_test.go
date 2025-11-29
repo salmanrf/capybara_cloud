@@ -11,47 +11,13 @@ import (
 	"testing"
 
 	"github.com/salmanrf/capybara-cloud/api"
-	"github.com/salmanrf/capybara-cloud/internal/database"
-	"github.com/salmanrf/capybara-cloud/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
-type StubUserService struct {
-	find_by_id_n_calls int
-	create_n_calls int
-	find_by_id_return *database.User
-	find_by_id_err error
-	create_return *database.User
-	create_err error
-}
-
-type StubAuthService struct {} 
-type StubOrgService struct {} 
-
-func (s *StubUserService) FindById(identifier string, is_email bool) (*database.User, error) {
-	s.find_by_id_n_calls += 1
-	return s.find_by_id_return, s.find_by_id_err
-}
-
-func (s *StubUserService) Create(create_dto dto.SignupDto) (*database.User, error) {
-	s.create_n_calls += 1
-	return s.create_return, s.create_err
-} 
-
-func (s *StubAuthService) GetMe(user_id string) (*database.User, error) {
-	return nil, nil
-}
-
-func (s *StubOrgService) Create(user_id string, org_name string) (*database.Organization, error) {
-	return nil, nil
-}
-
-func (s *StubOrgService) ListMyOrgs(user_id string) ([]database.FindOrganizationsForUserRow, error) {
-	return []database.FindOrganizationsForUserRow{}, nil
-} 
-
 func TestAuthSignupIntegration(t *testing.T) {
 	test_ctx := context.Background()
+
+	jwt_validator := &StubJwtValidator{}
 
 	t.Run("it creates and returns a new user", func (t *testing.T) {
 		user_service := &StubUserService{}
@@ -76,6 +42,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 			user_service,
 			auth_service,
 			org_service,
+			jwt_validator,
 		)
 
 		api_server.ServeHTTP(response, request)
@@ -105,6 +72,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 			user_service,
 			auth_service,
 			org_service,
+			jwt_validator,
 		)
 		
 		tests := []struct{
@@ -147,6 +115,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 			user_service,
 			auth_service,
 			org_service,
+			jwt_validator,
 		)
 		
 		tests := []struct{
