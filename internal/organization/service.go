@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/internal/user"
 )
@@ -23,13 +25,20 @@ type Service interface {
 
 type service struct {
 	ctx context.Context
+	conn *pgxpool.Pool
 	queries *database.Queries
 	user_service user.Service
 }
 
-func NewService(ctx context.Context, queries *database.Queries, user_service user.Service) Service {
+func NewService(
+	ctx context.Context, 
+	conn *pgxpool.Pool,
+	queries *database.Queries, 
+	user_service user.Service,
+) Service {
 	return &service{
 		ctx,
+		conn,
 		queries,
 		user_service,
 	}
@@ -90,7 +99,38 @@ func (s *service) DeleteOne(org_id string) error {
 	org_uuid := pgtype.UUID{}
 	org_uuid.Scan(org_id)
 
-	err := s.queries.DeleteOneOrganization(s.ctx, org_uuid)
+	trx, err := s.conn.Begin(s.ctx)
+	defer trx.Rollback(s.ctx)
+	q := s.queries.WithTx(trx)
+
+	if err != nil {
+		return err
+	}
+
+	err = s.DeleteOrgUsers(trx, org_id)
+
+	if err != nil {
+		return err
+	}
+
+	err = q.DeleteOneOrganization(s.ctx, org_uuid)
+
+	if err != nil {
+		return err
+	}
+
+	err = trx.Commit(s.ctx)
+	
+	return err
+}
+
+func (s *service) DeleteOrgUsers(trx pgx.Tx, org_id string) error {
+	org_uuid := pgtype.UUID{}
+	org_uuid.Scan(org_id)
+
+	q := s.queries.WithTx(trx)
+
+	err := q.DeleteOrganizationUsersByOrgId(s.ctx, org_uuid)
 
 	return err
 }
