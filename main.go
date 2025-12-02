@@ -13,6 +13,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/auth"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/internal/organization"
+	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
 	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
 )
@@ -66,6 +67,7 @@ func main() {
 	user_service := user.NewService(ctx, queries)
 	auth_service := auth.NewService(ctx, user_service)
 	org_service := organization.NewService(ctx, db_conn, queries, user_service)
+	project_service := project.NewService(ctx, db_conn, queries, user_service)
 	jwt_utils := auth_utils.NewJWTUtils(os.Getenv("AUTH_JWT_SECRET"))
 	
 	api_server := api.NewAPIServer(
@@ -73,6 +75,7 @@ func main() {
 		user_service, 
 		auth_service, 
 		org_service,
+		project_service,
 		jwt_utils,
 	)
 	

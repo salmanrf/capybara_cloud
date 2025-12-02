@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +16,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
-func TestOrganizationCreateIntegration(t *testing.T) {
+func TestProjectCreateIntegration(t *testing.T) {
 	test_ctx := context.Background()
 
 	user_service := &StubUserService{}
@@ -46,25 +45,30 @@ func TestOrganizationCreateIntegration(t *testing.T) {
 		jwt_validator,
 	)
 	
-	t.Run("it returns status code 201 and the new org on success", func (t *testing.T) {
-		req_body := bytes.NewReader([]byte(`
+	t.Run("it returns status code 201 and the new project on success", func (t *testing.T) {
+		user_id := "123"
+		org_id := "64c5e7da-3e02-4db8-aa2a-aa5161c085f7"
+		project_name := "Capybara Org" 
+		req_body := bytes.NewReader([]byte(fmt.Sprintf(`
 			{
-				"name": "Capybara Org"
+				"org_id": "%s",
+				"name": "%s"
 			}
-		`))
-		req, _ := http.NewRequest(http.MethodPost, "/api/organizations", req_body)
+		`, org_id, project_name)))
+		req, _ := http.NewRequest(http.MethodPost, "/api/projects", req_body)
 		res := httptest.NewRecorder()
 
-		mock_org := &database.Organization{
+		mock_project := &database.Project{
 			Name: "Capybara Org",
 		}
 
-		org_service.create_return = mock_org
-		org_service.create_err = nil
+		jwt_validator.validate_return = user_id
+		project_service.create_return = mock_project
+		project_service.create_err = nil
 
 		sid_cookie := &http.Cookie{
 			Name: "sid",
-			Value: "123",
+			Value: user_id,
 			Path: "/",
 			SameSite: http.SameSiteStrictMode,
 			MaxAge: 3600 * 24,
@@ -82,94 +86,99 @@ func TestOrganizationCreateIntegration(t *testing.T) {
 			t.Errorf("got status code %d, want %d", got_status, want_status)
 		}
 		
-		var got_body database.Organization
+		var got_body utils.BaseResponse[database.Project]
 		decoder := json.NewDecoder(res.Body)
 		if err := decoder.Decode(&got_body); err != nil {
 			t.Errorf("got error %v, want error nil", err.Error())
 		}
-		got_org_name := mock_org.Name
-		want_org_name := mock_org.Name
 
-		if got_org_name != want_org_name {
-			t.Errorf("got org name %s, want %s", got_org_name, want_org_name)
+		got_project_name := got_body.Data.(map[string]any)["name"]
+		want_org_name := project_name
+
+		if got_project_name != want_org_name {
+			t.Errorf("got project name %s, want %s", got_project_name, want_org_name)
+		}
+
+		got_called_n_times := project_service.create_n_calls
+		want_called_n_times := 1
+		got_called_with := project_service.create_call_args[0]
+		want_called_with := []string{
+			user_id,
+			org_id,
+			project_name,
+		}
+
+		if got_called_n_times != want_called_n_times {
+			t.Errorf("got create called %d times, want %d", got_called_n_times, want_called_n_times)
+		}
+
+		for i, arg := range got_called_with {
+			want_arg := want_called_with[i] 
+			if arg != want_arg {
+				t.Errorf("got arg %d %s, want %s", i + 1, arg, want_arg)
+			}
 		}
 	})
 
-	t.Run("it returns status code 401 on missing credentials", func (t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, "/api/organizations", nil)
-		res := httptest.NewRecorder()
-
-		server.ServeHTTP(res, req)
-
-		got_status := res.Result().StatusCode
-		want_status := http.StatusUnauthorized
-
-		if got_status != want_status {
-			t.Errorf("got status code %d, want %d", got_status, want_status)
-		}
-	})
-
-	t.Run("it returns status code 401 on jwt validation error", func (t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, "/api/organizations", nil)
-		res := httptest.NewRecorder()
-
-		jwt_validator.validate_error = errors.New("token expired")
-
-		sid_cookie := &http.Cookie{
-			Name: "sid",
-			Value: "123",
-			Path: "/",
-			SameSite: http.SameSiteStrictMode,
-			MaxAge: 3600 * 24,
-			HttpOnly: true,
-			Secure: os.Getenv("STAGE") != "local",
-		}
-		req.AddCookie(sid_cookie)
-
-		server.ServeHTTP(res, req)
-
-		got_status := res.Result().StatusCode
-		want_status := http.StatusUnauthorized
-
-		if got_status != want_status {
-			t.Errorf("got status code %d, want %d", got_status, want_status)
-		}
-	})
-
-	t.Run("it returns status code 400 on body validation error", func (t *testing.T) {
-		tests := []struct{
+	t.Run("it returns status code 400 when validation failed", func (t *testing.T) {
+		tt := []struct{
 			desc string
 			body any
 		}{
-			{"empty body", nil},
-			{"empty body", ""},
-			{"malformed json", "name: capybara"},
+			{
+				"empty json",
+				"{}",
+			},
+			{
+				"missing org_id",
+				`
+				{
+					"name": "Shop with Sophia"
+				}
+				`,
+			},
+			{
+				"missing name",
+				`
+				{
+					"org_id": "885f535a-7a45-450b-8c1a-1cbd0f46e5d8"
+				}
+				`,
+			},
+			{
+				"invalid org_id format",
+				`
+				{
+					"org_id": "abcd",
+					"name": "Study with Selma"
+				}
+				`,
+			},
 		}
 
-		sid_cookie := &http.Cookie{
-			Name: "sid",
-			Value: "123",
-			Path: "/",
-			SameSite: http.SameSiteStrictMode,
-			MaxAge: 3600 * 24,
-			HttpOnly: true,
-			Secure: os.Getenv("STAGE") != "local",
-		}
-
-		for _, tt := range tests {
+		for _, tt := range tt {
 			t.Run(fmt.Sprintf("returns 400 on %s", tt.desc), func (t *testing.T) {
-				req_body, _ := tt.body.(string)
-				body := bytes.NewReader([]byte(req_body))
-				req, _ := http.NewRequest(http.MethodPost, "/api/organizations", body)
+				payload, _ := tt.body.(string)
+				body := bytes.NewReader([]byte(payload))
+				req, _ := http.NewRequest(http.MethodPost, "/api/projects", body)
 				res := httptest.NewRecorder()
-				
+
+				sid_cookie := &http.Cookie{
+					Name: "sid",
+					Value: "123",
+					Path: "/",
+					SameSite: http.SameSiteStrictMode,
+					MaxAge: 3600 * 24,
+					HttpOnly: true,
+					Secure: os.Getenv("STAGE") != "local",
+				}
 				req.AddCookie(sid_cookie)
-		
+
 				server.ServeHTTP(res, req)
-		
+
 				got_status := res.Result().StatusCode
-				want_status := http.StatusUnauthorized
-		
+				want_status := http.StatusBadRequest
+
 				if got_status != want_status {
 					t.Errorf("got status code %d, want %d", got_status, want_status)
 				}
@@ -178,7 +187,7 @@ func TestOrganizationCreateIntegration(t *testing.T) {
 	})
 }
 
-func TestOrganizationGetOne(t *testing.T) {
+func TestProjectGetOne(t *testing.T) {
 	test_ctx := context.Background()
 
 	user_service := &StubUserService{}
@@ -217,18 +226,18 @@ func TestOrganizationGetOne(t *testing.T) {
 		Secure: os.Getenv("STAGE") != "local",
 	}
 	
-	org_service.find_by_id_return = &database.FindOneOrganizationByIdRow{
+	project_service.find_by_id_return = &database.FindOneProjectByIdRow{
 		Name: pgtype.Text{String: "Capybara"},
 	}
 
-	t.Run("it should return status 200 and the organization", func (t *testing.T) {
-		mock_org_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_org_uuid := pgtype.UUID{}
-		mock_org_uuid.Scan(mock_org_id)
+	t.Run("it should return status 200 and the project", func (t *testing.T) {
+		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		mock_project_uuid := pgtype.UUID{}
+		mock_project_uuid.Scan(mock_project_id)
 
-		org_service.find_by_id_return.OrgID = mock_org_uuid
+		project_service.find_by_id_return.ProjectID = mock_project_uuid
 		
-		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/organizations/%s", mock_org_id), nil)
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -248,21 +257,21 @@ func TestOrganizationGetOne(t *testing.T) {
 			t.Errorf("got error %s, want nil", err.Error())
 		}
 
-		got_id := got_body["data"].(map[string]interface{})["org_id"]
-		want_id := mock_org_id
+		got_id := got_body["data"].(map[string]interface{})["project_id"]
+		want_id := mock_project_id
 
 		if got_id != want_id {
-			t.Errorf("got org_id %v, want %s", got_id, want_id)
+			t.Errorf("got project_id %v, want %s", got_id, want_id)
 		}
 	})
 
-	t.Run("it should return status 404 when organization not found", func (t *testing.T) {
-		mock_org_uuid := pgtype.UUID{}
-		mock_org_uuid.Scan("28451bd5-0113-4ec6-9540-6646ae72a957")
+	t.Run("it should return status 404 when project not found", func (t *testing.T) {
+		mock_project_uuid := pgtype.UUID{}
+		mock_project_uuid.Scan("28451bd5-0113-4ec6-9540-6646ae72a957")
 
-		org_service.find_by_id_return = nil
+		project_service.find_by_id_return = nil
 		
-		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/organizations/%s", mock_org_uuid.String()), nil)
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects/%s", mock_project_uuid.String()), nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -278,7 +287,7 @@ func TestOrganizationGetOne(t *testing.T) {
 	})
 }
 
-func TestOrganizationUpdateOne(t *testing.T) {
+func TestProjectUpdateOne(t *testing.T) {
 	test_ctx := context.Background()
 
 	user_service := &StubUserService{}
@@ -317,30 +326,30 @@ func TestOrganizationUpdateOne(t *testing.T) {
 		Secure: os.Getenv("STAGE") != "local",
 	}
 	
-	org_service.find_by_id_and_role_return = &database.FindOneOrganizationByIdAndRoleRow{
+	project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
 		Name: pgtype.Text{String: "Capybara", Valid: true},
 	}
 
-	t.Run("it should return status 200 and the updated organization", func (t *testing.T) {
-		mock_org_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_org_uuid := pgtype.UUID{}
-		mock_org_uuid.Scan(mock_org_id)
+	t.Run("it should return status 200 and the updated project", func (t *testing.T) {
+		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		mock_project_uuid := pgtype.UUID{}
+		mock_project_uuid.Scan(mock_project_id)
 
-		org_service.find_by_id_and_role_return = &database.FindOneOrganizationByIdAndRoleRow{
-			OrgID: mock_org_uuid,
+		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
+			ProjectID: mock_project_uuid,
 			Name: pgtype.Text{String: "Capybara", Valid: true},
 			Role: "owner",
 		}
 
 		new_name := "Binturong Org"
 
-		org_service.update_one_return = &database.Organization{
-			OrgID: mock_org_uuid,
+		project_service.update_one_return = &database.Project{
+			ProjectID: mock_project_uuid,
 			Name: new_name,
 		}
 		payload := fmt.Sprintf(`{"name": "%s"}`, new_name)
 		body := bytes.NewReader([]byte(payload))
-		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/organizations/%s", mock_org_id), body)
+		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/projects/%s", mock_project_id), body)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -367,7 +376,7 @@ func TestOrganizationUpdateOne(t *testing.T) {
 			t.Errorf("got name %v, want %s", got_name, want_id)
 		}
 
-		got_update_one_calls := org_service.update_one_n_calls
+		got_update_one_calls := project_service.update_one_n_calls
 		want_update_one_n_calls := 1
 
 		if got_update_one_calls != want_update_one_n_calls {
@@ -376,19 +385,19 @@ func TestOrganizationUpdateOne(t *testing.T) {
 	})
 
 	t.Run("it should return status 403 if doesn't have sufficient permission", func (t *testing.T) {
-		mock_org_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_org_uuid := pgtype.UUID{}
-		mock_org_uuid.Scan(mock_org_id)
+		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		mock_project_uuid := pgtype.UUID{}
+		mock_project_uuid.Scan(mock_project_id)
 
-		org_service.find_by_id_and_role_return = &database.FindOneOrganizationByIdAndRoleRow{
-			OrgID: mock_org_uuid,
+		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
+			ProjectID: mock_project_uuid,
 			Name: pgtype.Text{String: "Capybara", Valid: true},
 			Role: "member",
 		}
 
 		payload := `{"name": "Tai Lung"}`
 		body := bytes.NewReader([]byte(payload))
-		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/organizations/%s", mock_org_id), body)
+		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/projects/%s", mock_project_id), body)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -403,8 +412,8 @@ func TestOrganizationUpdateOne(t *testing.T) {
 		}
 	})
 
-	t.Run("it should return status 404 if organization id not provided", func (t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPut, "/api/organizations/", nil)
+	t.Run("it should return status 404 if project id not provided", func (t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPut, "/api/projects/", nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -418,18 +427,18 @@ func TestOrganizationUpdateOne(t *testing.T) {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
 	})
-	t.Run("it should return status 404 if organization not found", func (t *testing.T) {
-		mock_org_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_org_uuid := pgtype.UUID{}
-		mock_org_uuid.Scan(mock_org_id)
+	t.Run("it should return status 404 if project not found", func (t *testing.T) {
+		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		mock_project_uuid := pgtype.UUID{}
+		mock_project_uuid.Scan(mock_project_id)
 
-		org_service.find_by_id_and_role_return = nil
-		org_service.find_by_id_and_role_error = nil
+		project_service.find_by_id_and_role_return = nil
+		project_service.find_by_id_and_role_error = nil
 
 		new_name := "Binturong Org"
 		payload := fmt.Sprintf(`{"name": "%s"}`, new_name)
 		body := bytes.NewReader([]byte(payload))
-		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/organizations/%s", mock_org_id), body)
+		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/projects/%s", mock_project_id), body)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -445,7 +454,7 @@ func TestOrganizationUpdateOne(t *testing.T) {
 	})
 }
 
-func TestOrganizationDeleteOne(t *testing.T) {
+func TestProjectDeleteOne(t *testing.T) {
 	test_ctx := context.Background()
 
 	user_service := &StubUserService{}
@@ -484,19 +493,19 @@ func TestOrganizationDeleteOne(t *testing.T) {
 		Secure: os.Getenv("STAGE") != "local",
 	}
 	
-	org_service.find_by_id_and_role_return = &database.FindOneOrganizationByIdAndRoleRow{
+	project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
 		Role: "owner",
 	}
 
 	t.Run("it should return status 204 on deletion", func (t *testing.T) {
-		org_service.delete_one_n_calls = 0
-		org_service.delete_one_call_args = []string{}
+		project_service.delete_one_n_calls = 0
+		project_service.delete_one_call_args = []string{}
 		
-		mock_org_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_org_uuid := pgtype.UUID{}
-		mock_org_uuid.Scan(mock_org_id)
-		org_service.find_by_id_and_role_return.OrgID = mock_org_uuid
-		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/organizations/%s", mock_org_id), nil)
+		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		mock_project_uuid := pgtype.UUID{}
+		mock_project_uuid.Scan(mock_project_id)
+		project_service.find_by_id_and_role_return.ProjectID = mock_project_uuid
+		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -510,10 +519,10 @@ func TestOrganizationDeleteOne(t *testing.T) {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
 
-		got_called := org_service.delete_one_n_calls
+		got_called := project_service.delete_one_n_calls
 		want_called := 1
-		got_called_with := org_service.delete_one_call_args[0]
-		want_called_with := mock_org_id
+		got_called_with := project_service.delete_one_call_args[0]
+		want_called_with := mock_project_id
 
 		if got_called != want_called {
 			t.Errorf("got update one called %d times, want %d", got_called, want_called)
@@ -524,10 +533,10 @@ func TestOrganizationDeleteOne(t *testing.T) {
 		}
 	})
 
-	t.Run("it should return status 404 when org_id is not specified", func (t *testing.T) {
-		org_service.find_by_id_and_role_return = nil
+	t.Run("it should return status 404 when project_id is not specified", func (t *testing.T) {
+		project_service.find_by_id_and_role_return = nil
 		
-		req, _ := http.NewRequest(http.MethodDelete, "/api/organizations/", nil)
+		req, _ := http.NewRequest(http.MethodDelete, "/api/projects/", nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -543,10 +552,10 @@ func TestOrganizationDeleteOne(t *testing.T) {
 	})
 
 	t.Run("it should return status 204 when org not found (already deleted)", func (t *testing.T) {
-		org_service.find_by_id_and_role_return = nil
+		project_service.find_by_id_and_role_return = nil
 		
-		mock_org_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/organizations/%s", mock_org_id), nil)
+		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -562,12 +571,12 @@ func TestOrganizationDeleteOne(t *testing.T) {
 	})
 
 	t.Run("it should return status 403 when doesn't have suficient permission", func (t *testing.T) {
-		org_service.find_by_id_and_role_return = &database.FindOneOrganizationByIdAndRoleRow{
+		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
 			Role: "owner",
 		}
 		
-		mock_org_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/organizations/%s", mock_org_id), nil)
+		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -583,12 +592,12 @@ func TestOrganizationDeleteOne(t *testing.T) {
 	})
 
 	t.Run("it should return status 403 when doesn't have suficient permission", func (t *testing.T) {
-		org_service.find_by_id_and_role_return = &database.FindOneOrganizationByIdAndRoleRow{
+		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
 			Role: "owner",
 		}
 		
-		mock_org_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/organizations/%s", mock_org_id), nil)
+		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
