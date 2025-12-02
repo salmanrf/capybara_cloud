@@ -23,6 +23,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 		user_service := &StubUserService{}
 		auth_service := &StubAuthService{}
 		org_service := &StubOrgService{}
+		project_service := &StubProjectService{}
 
 		user_body := `
 		{
@@ -42,6 +43,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 			user_service,
 			auth_service,
 			org_service,
+			project_service,
 			jwt_validator,
 		)
 
@@ -66,12 +68,14 @@ func TestAuthSignupIntegration(t *testing.T) {
 		user_service := &StubUserService{}
 		auth_service := &StubAuthService{}
 		org_service := &StubOrgService{}
+		project_service := &StubProjectService{}
 
 		api_server := api.NewAPIServer(
 			test_ctx, 
 			user_service,
 			auth_service,
 			org_service,
+			project_service,
 			jwt_validator,
 		)
 		
@@ -109,12 +113,14 @@ func TestAuthSignupIntegration(t *testing.T) {
 		user_service := &StubUserService{}
 		auth_service := &StubAuthService{}
 		org_service := &StubOrgService{}
+		project_service := &StubProjectService{}
 
 		api_server := api.NewAPIServer(
 			test_ctx, 
 			user_service,
 			auth_service,
 			org_service,
+			project_service,
 			jwt_validator,
 		)
 		
