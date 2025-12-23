@@ -1,0 +1,342 @@
+package tests
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/salmanrf/capybara-cloud/api"
+	"github.com/salmanrf/capybara-cloud/internal/database"
+	"github.com/salmanrf/capybara-cloud/pkg/dto"
+)
+
+func TestCreateApplication(t *testing.T) {
+	test_ctx := context.Background()
+	
+	user_service := &StubUserService{}
+	auth_service := &StubAuthService{}
+	org_service := &StubOrgService{}
+	project_service := &StubProjectService{}
+	application_service := &StubApplicationService{}
+	jwt_validator := &StubJwtValidator{}
+
+	server := api.NewAPIServer(
+		test_ctx,
+		application_service,
+		user_service,
+		auth_service,
+		org_service,
+		project_service,
+		jwt_validator,
+	)
+
+	sid_cookie := &http.Cookie{
+		Name: "sid",
+		Value: "123",
+		Path: "/",
+		SameSite: http.SameSiteStrictMode,
+		MaxAge: 3600 * 24,
+		HttpOnly: true,
+		Secure: os.Getenv("STAGE") != "local",
+	}
+	
+	t.Run("should returns status code 201 and the new application on success", func (t *testing.T) {
+		defer func () {
+			application_service.create_return = nil
+			application_service.create_n_calls = 0
+			application_service.create_calls_arg1 = []string{}
+		}()
+		
+		expected_app_uuid := pgtype.UUID{}
+		expected_app_uuid.Scan("a689caa1-6cdb-4d2c-8db0-5a30ee6f83fa")
+		expected_type := dto.GetSupportedAppTypes()[0]
+		expected_project_uuid := pgtype.UUID{}
+		expected_project_uuid.Scan("28451bd5-0113-4ec6-9540-6646ae72a957")
+		expected_app_name := "Sophia School"
+
+		application_service.create_return = &database.Application{
+			AppID: expected_app_uuid,
+			ProjectID: expected_project_uuid,
+			Name: expected_app_name,
+			Type: expected_type,
+		}
+
+		req_body := bytes.NewBuffer([]byte(
+			fmt.Sprintf(
+				`
+					{
+						"project_id": "%s",
+						"type": "%s",
+						"name": "%s"
+					}
+				`,
+				expected_project_uuid.String(),
+				expected_type,
+				expected_app_name,
+			),
+		))
+		req, _ := http.NewRequest(http.MethodPost, "/api/applications", req_body)
+		res := httptest.NewRecorder()
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusCreated
+
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d\n", got_status, want_status)
+		}
+
+		decoder := json.NewDecoder(res.Result().Body)
+		var got_body map[string]any
+		if err := decoder.Decode(&got_body); err != nil {
+			t.Errorf("got error %q, want nil\n", err)
+		}
+
+		got_data, ok := got_body["data"].(map[string]any)
+		if !ok {
+			t.Errorf("got %q, want data\n", got_data)
+		}
+
+		got_app_id, ok := got_data["app_id"].(string)
+		want_app_id := expected_app_uuid.String()
+		if !ok || got_app_id != want_app_id {
+			t.Errorf("got app id %v, want app id %v\n", got_app_id, want_app_id)
+		}
+
+		got_app_name, ok := got_data["name"].(string)
+		want_app_name := expected_app_name
+		if !ok || got_app_name != want_app_name {
+			t.Errorf("got app name %v, want app name %v\n", got_app_name, want_app_name)
+		}
+		got_project_id, ok := got_data["project_id"].(string)
+		want_project_id := expected_project_uuid.String()
+		if !ok || got_project_id != want_project_id {
+			t.Errorf("got project_id %v, want project_id %v\n", got_project_id, want_project_id)
+		}
+	})
+
+	t.Run("should create application on behalf of logged in user", func (t *testing.T) {
+		defer func () {
+			application_service.create_return = nil
+			application_service.create_n_calls = 0
+			application_service.create_calls_arg1 = []string{}
+		}()
+		
+		expected_user_id := "123"
+		expected_type := dto.GetSupportedAppTypes()[0]
+		expected_project_uuid := pgtype.UUID{}
+		expected_project_uuid.Scan("28451bd5-0113-4ec6-9540-6646ae72a957")
+		expected_app_name := "Sophia School"
+
+		jwt_validator.validate_return = expected_user_id
+
+		req_body := bytes.NewBuffer([]byte(
+			fmt.Sprintf(
+				`
+					{
+						"project_id": "%s",
+						"type": "%s",
+						"name": "%s"
+					}
+				`,
+				expected_project_uuid.String(),
+				expected_type,
+				expected_app_name,
+			),
+		))
+		req, _ := http.NewRequest(http.MethodPost, "/api/applications", req_body)
+		res := httptest.NewRecorder()
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_service_called := application_service.create_n_calls
+		want_service_called := 1
+
+		if got_service_called != want_service_called {
+			t.Errorf("got application_service create method called %d times, want %d\n", got_service_called, want_service_called)
+		}
+
+		got_called_with_user_id := application_service.create_calls_arg1[0]
+		want_called_with_user_id := expected_user_id
+
+		if got_called_with_user_id != want_called_with_user_id {
+			t.Errorf("got create called with user id %s, want %s", got_called_with_user_id, want_called_with_user_id)
+		}
+	})
+
+	t.Run("should returns 403 error if doesn't have enough permission", func (t *testing.T) {
+		defer func () {
+			application_service.create_return = nil
+			application_service.create_err = nil
+			application_service.create_n_calls = 0
+			application_service.create_calls_arg1 = []string{}
+		}()
+
+		application_service.create_err = errors.New("permission_denied")
+		
+		expected_user_id := "123"
+		expected_type := dto.GetSupportedAppTypes()[0]
+		expected_project_uuid := pgtype.UUID{}
+		expected_project_uuid.Scan("28451bd5-0113-4ec6-9540-6646ae72a957")
+		expected_app_name := "Sophia School"
+
+		jwt_validator.validate_return = expected_user_id
+
+		req_body := bytes.NewBuffer([]byte(
+			fmt.Sprintf(
+				`
+					{
+						"project_id": "%s",
+						"type": "%s",
+						"name": "%s"
+					}
+				`,
+				expected_project_uuid.String(),
+				expected_type,
+				expected_app_name,
+			),
+		))
+		req, _ := http.NewRequest(http.MethodPost, "/api/applications", req_body)
+		res := httptest.NewRecorder()
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status_code := res.Result().StatusCode
+		want_status_code := http.StatusForbidden
+
+		if got_status_code != want_status_code {
+			t.Errorf("got status code %d, want %d\n", got_status_code, want_status_code)
+		}
+	})
+
+	t.Run("should return status code 401 if not logged in", func (t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, "/api/applications", nil)
+		res := httptest.NewRecorder()
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusUnauthorized
+
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d\n", got_status, want_status)
+		}
+	})
+
+	t.Run("should returns status code 422 when received malformed payload", func (t *testing.T) {
+		tests := []struct{
+			desc string
+			body any
+		}{
+			{
+				"malformed json",
+				`
+				{
+					foobar: baz
+				}
+				`,
+			},
+			{
+				"nil",
+				nil,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("returns 422 on %s", tt.desc), func (t *testing.T) {
+				payload, _ := tt.body.(string)
+				req_body := bytes.NewBuffer([]byte(payload))
+				req, _ := http.NewRequest(http.MethodPost, "/api/applications", req_body)
+				res := httptest.NewRecorder()
+				req.AddCookie(sid_cookie)
+
+				server.ServeHTTP(res, req)
+
+				got_status := res.Result().StatusCode
+				want_status := http.StatusUnprocessableEntity
+
+				if got_status != want_status {
+					t.Errorf("got status code %d, want %d\n", got_status, want_status)
+				}
+			})
+		}
+	})
+
+	t.Run("should returns status code 400 when validation failed", func (t *testing.T) {
+		tests := []struct{
+			desc string
+			body any
+		}{
+			{
+				"empty json",
+				"{}",
+			},
+			{
+				"empty name",
+				`
+				{
+					"foo": "bar"
+				}
+				`,
+			},
+			{
+				"empty project_id",
+				`
+				{
+					"name": "Ada Computer Hardwares"
+				}
+				`,
+			},
+			{
+				"unsupported app type",
+				`
+				{
+					"project_id": "28451bd5-0113-4ec6-9540-6646ae72a957",
+					"name": "Ada Computer Hardwares",
+					"type": "native_compute_intensive"
+				}
+				`,
+			},
+			{
+				"invalid project_id",
+				`
+				{
+					"project_id": "28451bd5-0113-4ec6",
+					"name": "Ada Computer Hardwares",
+					"type": "native_compute_intensive"
+				}
+				`,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("returns 400 on %s", tt.desc), func (t *testing.T) {
+				payload, _ := tt.body.(string)
+				req_body := bytes.NewBuffer([]byte(payload))
+				req, _ := http.NewRequest(http.MethodPost, "/api/applications", req_body)
+				res := httptest.NewRecorder()
+				req.AddCookie(sid_cookie)
+
+				server.ServeHTTP(res, req)
+
+				got_status := res.Result().StatusCode
+				want_status := http.StatusBadRequest
+
+				if got_status != want_status {
+					t.Errorf("got status code %d, want %d\n", got_status, want_status)
+				}
+			})
+		}
+	})
+}

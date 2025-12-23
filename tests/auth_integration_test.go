@@ -17,13 +17,13 @@ import (
 func TestAuthSignupIntegration(t *testing.T) {
 	test_ctx := context.Background()
 
-	jwt_validator := &StubJwtValidator{}
-
 	t.Run("it creates and returns a new user", func (t *testing.T) {
 		user_service := &StubUserService{}
 		auth_service := &StubAuthService{}
 		org_service := &StubOrgService{}
 		project_service := &StubProjectService{}
+		application_service := &StubApplicationService{}
+		jwt_validator := &StubJwtValidator{}
 
 		user_body := `
 		{
@@ -40,6 +40,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 		
 		api_server := api.NewAPIServer(
 			test_ctx, 
+			application_service,
 			user_service,
 			auth_service,
 			org_service,
@@ -69,9 +70,12 @@ func TestAuthSignupIntegration(t *testing.T) {
 		auth_service := &StubAuthService{}
 		org_service := &StubOrgService{}
 		project_service := &StubProjectService{}
+		application_service := &StubApplicationService{}
+		jwt_validator := &StubJwtValidator{}
 
 		api_server := api.NewAPIServer(
 			test_ctx, 
+			application_service,
 			user_service,
 			auth_service,
 			org_service,
@@ -114,9 +118,12 @@ func TestAuthSignupIntegration(t *testing.T) {
 		auth_service := &StubAuthService{}
 		org_service := &StubOrgService{}
 		project_service := &StubProjectService{}
+		application_service := &StubApplicationService{}
+		jwt_validator := &StubJwtValidator{}
 
 		api_server := api.NewAPIServer(
 			test_ctx, 
+			application_service,
 			user_service,
 			auth_service,
 			org_service,
