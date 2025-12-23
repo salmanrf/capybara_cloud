@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/salmanrf/capybara-cloud/api/routes"
+	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/auth"
 	"github.com/salmanrf/capybara-cloud/internal/organization"
 	"github.com/salmanrf/capybara-cloud/internal/project"
@@ -18,6 +19,7 @@ type api_server struct {
 
 func NewAPIServer(
 	ctx context.Context,
+	application_service application.Service,
 	user_service user.Service,
 	auth_service auth.Service,
 	org_service organization.Service,
@@ -29,6 +31,7 @@ func NewAPIServer(
 	routes.SetupAuthRouter(mux, auth_service, user_service, jwt_validator)
 	routes.SetupOrganizationRouter(mux, org_service, jwt_validator)
 	routes.SetupProjectRouter(mux, project_service, jwt_validator)
+	routes.SetupApplicationRouter(mux, application_service, jwt_validator)
 	
 	s := api_server{
 		mux,

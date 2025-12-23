@@ -23,6 +23,7 @@ func TestProjectCreateIntegration(t *testing.T) {
 	auth_service := &StubAuthService{}
 	org_service := &StubOrgService{}
 	project_service := &StubProjectService{}
+	application_service := &StubApplicationService{}
 	jwt_validator := &StubJwtValidator{}
 
 	mock_user := &database.User{
@@ -38,6 +39,7 @@ func TestProjectCreateIntegration(t *testing.T) {
 
 	server := api.NewAPIServer(
 		test_ctx,
+		application_service,
 		user_service,
 		auth_service,
 		org_service,
@@ -194,6 +196,7 @@ func TestProjectGetOne(t *testing.T) {
 	auth_service := &StubAuthService{}
 	org_service := &StubOrgService{}
 	project_service := &StubProjectService{}
+	application_service := &StubApplicationService{}
 	jwt_validator := &StubJwtValidator{}
 
 	mock_user := &database.User{
@@ -209,6 +212,7 @@ func TestProjectGetOne(t *testing.T) {
 
 	server := api.NewAPIServer(
 		test_ctx,
+		application_service,
 		user_service,
 		auth_service,
 		org_service,
@@ -294,6 +298,7 @@ func TestProjectUpdateOne(t *testing.T) {
 	auth_service := &StubAuthService{}
 	org_service := &StubOrgService{}
 	project_service := &StubProjectService{}
+	application_service := &StubApplicationService{}
 	jwt_validator := &StubJwtValidator{}
 
 	mock_user := &database.User{
@@ -309,6 +314,7 @@ func TestProjectUpdateOne(t *testing.T) {
 
 	server := api.NewAPIServer(
 		test_ctx,
+		application_service,
 		user_service,
 		auth_service,
 		org_service,
@@ -461,6 +467,7 @@ func TestProjectDeleteOne(t *testing.T) {
 	auth_service := &StubAuthService{}
 	org_service := &StubOrgService{}
 	project_service := &StubProjectService{}
+	application_service := &StubApplicationService{}
 	jwt_validator := &StubJwtValidator{}
 
 	mock_user := &database.User{
@@ -476,6 +483,7 @@ func TestProjectDeleteOne(t *testing.T) {
 
 	server := api.NewAPIServer(
 		test_ctx,
+		application_service,
 		user_service,
 		auth_service,
 		org_service,

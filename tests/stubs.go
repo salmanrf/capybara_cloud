@@ -130,6 +130,19 @@ func (s *StubProjectService) ListMyProjects(user_id string) ([]database.FindProj
 	return []database.FindProjectsForUserRow{}, nil
 }
 
+type StubApplicationService struct {
+	create_n_calls int
+	create_return *database.Application
+	create_err error
+	create_calls_arg1 []string
+}
+
+func (s *StubApplicationService) Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error) {
+	s.create_n_calls += 1
+	s.create_calls_arg1 = []string{user_id}
+	return s.create_return, s.create_err
+}
+
 type StubJwtValidator struct {
 	validate_return string
 	validate_error error 
