@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
@@ -57,6 +58,95 @@ func CreateApplicationHandler(app_service application.Service) http.HandlerFunc 
 			http.StatusCreated,
 			new_application,
 			"Application created successfully",
+		)
+	}
+}
+
+func UpdateApplicationHandler(app_service application.Service) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		app_id := strings.TrimPrefix(r.URL.Path, "/api/applications/")
+		if app_id == "" {
+			utils.ResponseWithSuccess[any](
+				w,
+				http.StatusNotFound,
+				nil,
+				"App id not specified",
+			)
+			return
+		}
+
+		user_id, _ := r.Context().Value("user_id").(string)
+		if user_id == "" {
+			utils.ResponseWithError(
+				w,
+				http.StatusUnauthorized,
+				nil,
+				"Unauthorized",
+			)
+			return
+		}
+
+		decoder := json.NewDecoder(r.Body)
+		var body dto.UpdateApplicationDto
+		if err := decoder.Decode(&body); err != nil {
+			utils.ResponseWithError(
+				w,
+				http.StatusUnprocessableEntity,
+				nil,
+				err.Error(),
+			)
+			return	
+		}
+		if _, err := body.Validate(); err != nil {
+			utils.ResponseWithError(
+				w,
+				http.StatusBadRequest,
+				nil,
+				err.Error(),
+			)
+			return	
+		}
+
+		updated_app, err := app_service.Update(
+			app_id,
+			user_id,
+			body,
+		)
+
+		if err != nil {
+			errmsg := err.Error()
+			if errmsg == "permission_denied" {
+				utils.ResponseWithError(
+					w,
+					http.StatusForbidden,
+					nil,
+					"Insufficient permission to update application",
+				)
+				return	
+			} 
+			if errmsg == "not_found" {
+				utils.ResponseWithError(
+					w,
+					http.StatusNotFound,
+					nil,
+					"Not found",
+				)
+				return
+			}
+			utils.ResponseWithError(
+					w,
+					http.StatusInternalServerError,
+					nil,
+					"Internal server error",
+				)
+				return
+		}
+		
+		utils.ResponseWithSuccess(
+			w,
+			http.StatusOK,
+			&updated_app,
+			"Application updated successfully",
 		)
 	}
 }

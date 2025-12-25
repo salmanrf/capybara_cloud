@@ -135,12 +135,39 @@ type StubApplicationService struct {
 	create_return *database.Application
 	create_err error
 	create_calls_arg1 []string
+	update_n_calls int
+	update_return *database.Application
+	update_err error
+	update_calls_arg1 []string
+	update_calls_arg2 []string
+	update_calls_arg3 []dto.UpdateApplicationDto
+}
+
+func (s *StubApplicationService) Clear() {
+	s.create_n_calls = 0
+	s.create_return = nil
+	s.create_err = nil
+	s.update_n_calls = 0
+	s.update_return = nil
+	s.update_err = nil
+	s.create_calls_arg1 = []string{}
+	s.update_calls_arg1 = []string{}
+	s.update_calls_arg2 = []string{}
+	s.update_calls_arg3 = []dto.UpdateApplicationDto{}
 }
 
 func (s *StubApplicationService) Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error) {
 	s.create_n_calls += 1
-	s.create_calls_arg1 = []string{user_id}
+	s.create_calls_arg1 = append(s.create_calls_arg1, user_id)
 	return s.create_return, s.create_err
+}
+
+func (s *StubApplicationService) Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error) {
+	s.update_n_calls += 1
+	s.update_calls_arg1 = append(s.update_calls_arg1, app_id)
+	s.update_calls_arg2 = append(s.update_calls_arg2, user_id)
+	s.update_calls_arg3 = append(s.update_calls_arg3, dto)
+	return s.update_return, s.update_err
 }
 
 type StubJwtValidator struct {
