@@ -13,8 +13,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/api"
+	"github.com/salmanrf/capybara-cloud/api/routes"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
+	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
 func TestCreateApplication(t *testing.T) {
@@ -98,7 +100,7 @@ func TestCreateApplication(t *testing.T) {
 		decoder := json.NewDecoder(res.Result().Body)
 		var got_body map[string]any
 		if err := decoder.Decode(&got_body); err != nil {
-			t.Errorf("got error %q, want nil\n", err)
+			t.Errorf("got error parsing response body %v, want nil\n", err)
 		}
 
 		got_data, ok := got_body["data"].(map[string]any)
@@ -337,6 +339,262 @@ func TestCreateApplication(t *testing.T) {
 					t.Errorf("got status code %d, want %d\n", got_status, want_status)
 				}
 			})
+		}
+	})
+}
+
+func TestUpdateApplication(t *testing.T) {
+	mux := http.NewServeMux()
+
+	application_service := &StubApplicationService{}
+	jwt_validator := &StubJwtValidator{}
+	
+	routes.SetupApplicationRouter(mux, application_service, jwt_validator)
+
+	type api_server struct {
+		http.Handler
+	}
+
+	api := api_server{
+		mux,
+	}
+
+	sid_cookie := &http.Cookie{
+		Name: "sid",
+		Value: "123",
+		Path: "/",
+		SameSite: http.SameSiteStrictMode,
+		MaxAge: 3600 * 24,
+		HttpOnly: true,
+		Secure: os.Getenv("STAGE") != "local",
+	}
+
+	mock_user_id := "9ae9a0b2-d09e-4dcf-a0b1-18316fcef6cc"
+
+	t.Run("should return status code 401 if not logged in", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		
+		req, _ := http.NewRequest(
+			http.MethodPut, 
+			fmt.Sprintf("/api/applications/%s", expected_app_id), 
+			nil,
+		)
+		res := httptest.NewRecorder()
+
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusUnauthorized
+
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d\n", got_status, want_status)
+		}
+	})
+
+	t.Run("should return status code 200 on success and the updated application", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		expected_new_name := "Ada Hardware 2"
+		req_body := bytes.NewBuffer([]byte(
+			// ? ignore and check assert to whatever is returned by the service
+			`
+				{
+					"name": "12345" 
+				}
+			`,
+		))
+
+		jwt_validator.validate_return = mock_user_id
+		application_service.update_return = &database.Application{
+			Name: expected_new_name,
+		}
+
+		req, _ := http.NewRequest(
+			http.MethodPut, 
+			fmt.Sprintf("/api/applications/%s", expected_app_id), 
+			req_body,
+		)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusOK
+
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d\n", got_status, want_status)
+		}
+
+		decoder := json.NewDecoder(res.Result().Body)
+		var got_body utils.BaseResponse[map[string]any]		
+
+		if err := decoder.Decode(&got_body); err != nil {
+			t.Errorf("got error parsing response body %v, want nil", err)
+		}
+
+		data, ok := got_body.Data.(map[string]any)
+		got_body_name := data["name"].(string)
+		want_name := expected_new_name
+		if !ok || got_body_name != want_name {
+			t.Errorf("got new app name %s, want %s", got_body_name, want_name)
+		}
+	})
+
+	t.Run("should call service method correctly", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		expected_new_name := "Ada Hardware"
+		req_body := bytes.NewBuffer([]byte(
+			fmt.Sprintf(
+				`
+					{
+						"name": "%s"
+					}
+				`,
+				expected_new_name,
+			),
+		))
+
+		jwt_validator.validate_return = mock_user_id
+		application_service.update_return = &database.Application{
+			Name: expected_new_name,
+		}
+
+		req, _ := http.NewRequest(
+			http.MethodPut, 
+			fmt.Sprintf("/api/applications/%s", expected_app_id), 
+			req_body,
+		)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		api.ServeHTTP(res, req)
+
+		got_update_called := application_service.update_n_calls
+		want_update_callled := 1
+
+		if got_update_called != want_update_callled {
+			t.Errorf("got service method update called %d times, want %d\n", got_update_called, want_update_callled)
+		}
+
+		got_called_with_app_id := application_service.update_calls_arg1[0]
+		want_called_with_app_id := expected_app_id
+
+		if got_called_with_app_id != want_called_with_app_id {
+			t.Errorf("got service method update called with app id %s, want %s\n", got_called_with_app_id, want_called_with_app_id)
+		}
+
+		got_called_with_user_id := application_service.update_calls_arg2[0]
+		want_called_with_user_id := mock_user_id
+
+		if got_called_with_user_id != want_called_with_user_id {
+			t.Errorf("got service method update called with user id %s, want %s\n", got_called_with_user_id, want_called_with_user_id)
+		}
+
+		got_called_with_dto := application_service.update_calls_arg3[0]
+		want_called_with_dto := dto.UpdateApplicationDto{
+			Name: expected_new_name,
+		}
+
+		if got_called_with_dto != want_called_with_dto {
+			t.Errorf("got service method update called with dto %v, want %v\n", got_called_with_dto, want_called_with_dto)
+		}
+	})
+
+	t.Run("should returns status code 400 when validation failed", func (t *testing.T) {
+		tests := []struct{
+			desc string
+			body any
+		}{
+			{
+				"empty json",
+				"{}",
+			},
+			{
+				"empty name",
+				`
+				{
+					"foo": "bar"
+				}
+				`,
+			},
+		}
+
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("returns 400 on %s", tt.desc), func (t *testing.T) {
+				payload, _ := tt.body.(string)
+				req_body := bytes.NewBuffer([]byte(payload))
+				req, _ := http.NewRequest(
+					http.MethodPut, 
+					fmt.Sprintf("/api/applications/%s", expected_app_id), 
+					req_body,
+				)
+				res := httptest.NewRecorder()
+				req.AddCookie(sid_cookie)
+
+				api.ServeHTTP(res, req)
+
+				got_status := res.Result().StatusCode
+				want_status := http.StatusBadRequest
+
+				if got_status != want_status {
+					t.Errorf("got status code %d, want %d\n", got_status, want_status)
+				}
+			})
+		}
+	})
+
+	t.Run("should return status code 403 if doesn't have sufficient permission", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		expected_new_name := "Ada Hardware"
+		req_body := bytes.NewBuffer([]byte(
+			fmt.Sprintf(
+				`
+					{
+						"name": "%s"
+					}
+				`,
+				expected_new_name,
+			),
+		))
+
+		application_service.update_err = errors.New("permission_denied")
+		
+		req, _ := http.NewRequest(
+			http.MethodPut, 
+			fmt.Sprintf("/api/applications/%s", expected_app_id), 
+			req_body,
+		)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusForbidden
+
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d\n", got_status, want_status)
 		}
 	})
 }

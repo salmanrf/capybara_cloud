@@ -12,8 +12,17 @@ import (
 func SetupApplicationRouter(mux *http.ServeMux, application_service application.Service, jwt_validator auth.JWT) {
 	mux.Handle(
 		"POST /api/applications", 
-		middleware.LoginGuard(jwt_validator, 
-			http.HandlerFunc(handlers.CreateApplicationHandler(application_service)),
+		middleware.LoginGuard(
+			jwt_validator, 
+			handlers.CreateApplicationHandler(application_service),
+		),
+	)
+
+	mux.Handle(
+		"PUT /api/applications/",
+		middleware.LoginGuard(
+			jwt_validator,
+			handlers.UpdateApplicationHandler(application_service),
 		),
 	)
 }
