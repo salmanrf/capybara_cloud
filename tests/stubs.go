@@ -141,6 +141,11 @@ type StubApplicationService struct {
 	update_calls_arg1 []string
 	update_calls_arg2 []string
 	update_calls_arg3 []dto.UpdateApplicationDto
+	find_one_n_calls int
+	find_one_return *database.FindOneApplicationWithProjectMemberRow
+	find_one_error error
+	find_one_calls_arg1 []string
+	find_one_calls_arg2 []string
 }
 
 func (s *StubApplicationService) Clear() {
@@ -154,6 +159,11 @@ func (s *StubApplicationService) Clear() {
 	s.update_calls_arg1 = []string{}
 	s.update_calls_arg2 = []string{}
 	s.update_calls_arg3 = []dto.UpdateApplicationDto{}
+	s.find_one_return = nil
+	s.find_one_error = nil
+	s.find_one_n_calls = 0
+	s.find_one_calls_arg1 = []string{}
+	s.find_one_calls_arg2 = []string{}
 }
 
 func (s *StubApplicationService) Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error) {
@@ -169,6 +179,13 @@ func (s *StubApplicationService) Update(app_id string, user_id string, dto dto.U
 	s.update_calls_arg3 = append(s.update_calls_arg3, dto)
 	return s.update_return, s.update_err
 }
+
+func (s *StubApplicationService) FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error) {
+	s.find_one_n_calls += 1
+	s.find_one_calls_arg1 = append(s.find_one_calls_arg1, app_id)
+	s.find_one_calls_arg2 = append(s.find_one_calls_arg2, user_id)
+	return s.find_one_return, s.find_one_error
+} 
 
 type StubJwtValidator struct {
 	validate_return string

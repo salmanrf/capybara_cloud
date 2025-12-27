@@ -16,6 +16,7 @@ import (
 type Service interface {
 	Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error)
 	Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error)
+	FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error)
 }
 
 type service struct {
@@ -64,35 +65,50 @@ func (s *service) Create(user_id string, dto dto.CreateApplicationDto) (*databas
 	return &new_application, nil
 }
 
-func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error) {
+func (s *service) FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error) {
 	app_uuid := pgtype.UUID{}
 	app_uuid.Scan(app_id)
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
+
 	app_with_pm, err := s.queries.FindOneApplicationWithProjectMember(
 		s.ctx,
 		database.FindOneApplicationWithProjectMemberParams{
 			AppID: app_uuid,
 			UserID: user_uuid,
 		},
-	) 
+	)
+
+	if !app_with_pm.AppID.Valid {
+		return nil, nil
+	}
+
+	if !app_with_pm.PmProjectID.Valid {
+		return nil, errors.New("permission_denied")
+	}
+	
+	return &app_with_pm, err
+}
+
+func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error) {
+	app_with_pm, err := s.FindOne(app_id, user_id)
 
 	if err != nil {
 		errmsg := err.Error()
 		if strings.Contains(errmsg, "no rows") {
-			return nil, errors.New("permission_denied")
+			return nil, errors.New("not_found")
 		}
 		return nil, err
 	}
 	
-	if app_with_pm.AppID.String() == "" {
-		return nil, nil
+	if app_with_pm == nil {
+		return nil, errors.New("not_found")
 	}
 
 	updated_app, err := s.queries.UpdateOneApplication(
 		s.ctx,
 		database.UpdateOneApplicationParams{
-			AppID: app_uuid,
+			AppID: app_with_pm.AppID,
 			Name: dto.Name,
 			UpdatedAt: pgtype.Timestamp{
 				Time: time.Now(),

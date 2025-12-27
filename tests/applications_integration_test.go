@@ -598,3 +598,234 @@ func TestUpdateApplication(t *testing.T) {
 		}
 	})
 }
+
+func TestFindOneApplication(t *testing.T) {
+	mux := http.NewServeMux()
+	
+	application_service := &StubApplicationService{}
+	jwt_validator := &StubJwtValidator{}
+	
+	routes.SetupApplicationRouter(mux, application_service, jwt_validator)
+
+	type api_server struct {
+		http.Handler
+	}
+
+	api := api_server{
+		mux,
+	}
+
+	sid_cookie := &http.Cookie{
+		Name: "sid",
+		Value: "123",
+		Path: "/",
+		SameSite: http.SameSiteStrictMode,
+		MaxAge: 3600 * 24,
+		HttpOnly: true,
+		Secure: os.Getenv("STAGE") != "local",
+	}
+
+	t.Run("should return status code 401 if not logged in", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		
+		req, _ := http.NewRequest(
+			http.MethodGet, 
+			fmt.Sprintf("/api/applications/%s", expected_app_id), 
+			nil,
+		)
+		res := httptest.NewRecorder()
+
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusUnauthorized
+
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d\n", got_status, want_status)
+		}
+	})
+
+	t.Run("should return status code 404 if server returns nil", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+
+		application_service.find_one_return = nil
+		application_service.find_one_error = nil
+		
+		req, _ := http.NewRequest(
+			http.MethodGet, 
+			fmt.Sprintf("/api/applications/%s", expected_app_id), 
+			nil,
+		)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+		
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusNotFound
+
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d\n", got_status, want_status)
+		}
+	})
+
+	t.Run("should return status code 403 doesn't have enough permission", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+
+		application_service.find_one_return = nil
+		application_service.find_one_error = errors.New("permission_denied")
+		
+		req, _ := http.NewRequest(
+			http.MethodGet, 
+			fmt.Sprintf("/api/applications/%s", expected_app_id), 
+			nil,
+		)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+		
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusForbidden
+
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d\n", got_status, want_status)
+		}
+	})
+	
+	t.Run("should return the application from service", func (t *testing.T) {
+		tests := []struct{
+			app_id string
+		}{
+			{"7aaa1bf8-437f-4f3c-8691-8316fc6fbeaa"},
+			{"7aaa1bf8-437f-4f3c-8691-8316fc6fbebb"},
+			{"7aaa1bf8-437f-4f3c-8691-8316fc6fbecc"},
+		}
+
+		for i, tt := range tests {
+			t.Run(fmt.Sprintf("%d", i), func (t *testing.T) {
+				defer func() {
+					application_service.Clear()
+				}()
+				
+				expected_app_id := tt.app_id
+				expected_app_uuid := pgtype.UUID{}
+				expected_app_uuid.Scan(expected_app_id)
+
+				application_service.find_one_return = &database.FindOneApplicationWithProjectMemberRow{
+					AppID: expected_app_uuid,
+				}
+				
+				req, _ := http.NewRequest(
+					http.MethodGet, 
+					fmt.Sprintf("/api/applications/%s", expected_app_id), 
+					nil,
+				)
+				res := httptest.NewRecorder()
+
+				req.AddCookie(sid_cookie)
+
+				api.ServeHTTP(res, req)
+
+				got_status := res.Result().StatusCode
+				want_status := http.StatusOK
+
+				if got_status != want_status {
+					t.Errorf("got status code %d, want %d\n", got_status, want_status)
+				}
+
+				decoder := json.NewDecoder(res.Result().Body)
+				var got_body utils.BaseResponse[any]
+				if err := decoder.Decode(&got_body); err != nil {
+					t.Errorf("got error parsing response body %v, want nil", err)
+				}
+
+				got_data, ok := got_body.Data.(map[string]any) 
+				if !ok {
+					t.Errorf("got response data %v, want map", got_data)
+				}
+
+				got_app_id, ok := got_data["app_id"].(string) 
+				want_app_id := expected_app_id
+				if !ok || got_app_id != expected_app_id {
+					t.Errorf("got app_id %s, want %s", got_app_id, want_app_id)
+				}
+			})
+		}
+	})
+
+	t.Run("should call service properly", func (t *testing.T) {
+		tests := []struct{
+			app_id string
+		}{
+			{"7aaa1bf8-437f-4f3c-8691-8316fc6fbeaa"},
+			{"7aaa1bf8-437f-4f3c-8691-8316fc6fbebb"},
+			{"7aaa1bf8-437f-4f3c-8691-8316fc6fbecc"},
+		}
+
+		expected_user_id := "abcd"
+		jwt_validator.validate_return = expected_user_id
+
+		for i, tt := range tests {
+			t.Run(fmt.Sprintf("%d", i), func (t *testing.T) {
+				defer func() {
+					application_service.Clear()
+				}()
+				
+				expected_app_id := tt.app_id
+				expected_app_uuid := pgtype.UUID{}
+				expected_app_uuid.Scan(expected_app_id)
+
+				application_service.find_one_return = &database.FindOneApplicationWithProjectMemberRow{
+					AppID: expected_app_uuid,
+				}
+				
+				req, _ := http.NewRequest(
+					http.MethodGet, 
+					fmt.Sprintf("/api/applications/%s", expected_app_id), 
+					nil,
+				)
+				res := httptest.NewRecorder()
+
+				req.AddCookie(sid_cookie)
+
+				api.ServeHTTP(res, req)
+
+				got_service_called_n_times := application_service.find_one_n_calls
+				want_service_called_n_times := 1
+
+				if got_service_called_n_times != want_service_called_n_times {
+					t.Errorf("got service method called %d times, want %d", got_service_called_n_times, want_service_called_n_times)
+				}
+				
+				got_service_called_with_app_id := application_service.find_one_calls_arg1[0]
+				want_service_called_with_app_id := expected_app_id
+
+				if got_service_called_with_app_id != want_service_called_with_app_id {
+					t.Errorf("got service method called with app id %s, want %s", got_service_called_with_app_id, want_service_called_with_app_id)
+				}
+				
+				got_service_called_with_user_id := application_service.find_one_calls_arg2[0]
+				want_service_called_with_user_id := expected_user_id
+				
+				if got_service_called_with_user_id != want_service_called_with_user_id {
+					t.Errorf("got service method called with user id %s, want %s", got_service_called_with_user_id, want_service_called_with_user_id)
+				}
+			})
+		}
+	})
+}
