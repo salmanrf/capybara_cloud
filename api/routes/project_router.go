@@ -2,44 +2,52 @@ package routes
 
 import (
 	"net/http"
-	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/salmanrf/capybara-cloud/api/handlers"
 	"github.com/salmanrf/capybara-cloud/api/middleware"
 	"github.com/salmanrf/capybara-cloud/internal/project"
-	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
+	"github.com/salmanrf/capybara-cloud/pkg/auth"
+	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
-func SetupProjectRouter(mux *http.ServeMux, ps project.Service, jwt_validator auth_utils.JWT) {
-	mux.Handle(
-		"POST /api/projects", 
-		middleware.LoginGuard(jwt_validator, handlers.CreateProjectHandler(ps)),
-	)
+func SetupProjectRouter(project_service project.Service, jwt_validator auth.JWT) chi.Router {
+	r := chi.NewRouter()
 
-	get_one_handler := handlers.GetOneProjectHandler(ps)
-	list_handler := handlers.ListMyProjectHandler(ps)
-	
-	mux.Handle(
-		"GET /api/projects/", 
-		middleware.LoginGuard(jwt_validator, http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
-			endpoint := strings.TrimPrefix(r.URL.Path, "/api/projects") 
+	project_handlers := handlers.NewProjectHandlers(project_service)
 
-			if endpoint == "/" {
-				list_handler(w, r)
-				return
-			}
+	r.Put("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		utils.ResponseWithError(w, http.StatusNotFound, nil, "Project ID required")
+	}))
 
-			get_one_handler(w, r)
-		})),
-	)
+	r.Delete("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		utils.ResponseWithError(w, http.StatusNotFound, nil, "Project ID required")
+	}))
 
-	mux.Handle(
-		"PUT /api/projects/", 
-		middleware.LoginGuard(jwt_validator, handlers.UpdateOneProjectHandler(ps)),
-	)
+	r.Get("/", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(project_handlers.HandleListMyProjects),
+	))
 
-	mux.Handle(
-		"DELETE /api/projects/", 
-		middleware.LoginGuard(jwt_validator, handlers.DeleteOneProjectHandler(ps)),
-	)
+	r.Post("/", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(project_handlers.HandleCreate),
+	))
+
+	r.Get("/{project_id}", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(project_handlers.HandleFindOne),
+	))
+
+	r.Put("/{project_id}", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(project_handlers.HandleUpdate),
+	))
+
+	r.Delete("/{project_id}", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(project_handlers.HandleDelete),
+	))
+
+	return r
 }

@@ -12,8 +12,25 @@ import (
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
-func CreateOrgHandler(os organization.Service) http.HandlerFunc {
-	return func (w http.ResponseWriter, r *http.Request) {
+type org_handler struct {
+	org_service organization.Service
+}
+
+type OrgHandlers interface {
+	HandleFindOne(w http.ResponseWriter, r *http.Request) 
+	HandleCreate(w http.ResponseWriter, r *http.Request)
+	HandleUpdate(w http.ResponseWriter, r *http.Request)
+	HandleDelete(w http.ResponseWriter, r *http.Request)
+	HandleListMyOrganizations(w http.ResponseWriter, r *http.Request)
+}
+
+func NewOrgHandlers(org_service organization.Service) OrgHandlers {
+	return &org_handler{
+		org_service,
+	}
+}
+
+func (h *org_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		var body dto.CreateOrgDto
 
 		decoder := json.NewDecoder(r.Body)
@@ -36,7 +53,7 @@ func CreateOrgHandler(os organization.Service) http.HandlerFunc {
 		rctx := r.Context()
 		user_id := rctx.Value("user_id").(string)
 
-		org, err := os.Create(user_id, body.Name)
+		org, err := h.org_service.Create(user_id, body.Name)
 		if err != nil {
 			errmsg := err.Error()
 			fmt.Println("CreateOrg failed", errmsg)
@@ -55,246 +72,210 @@ func CreateOrgHandler(os organization.Service) http.HandlerFunc {
 			"Organization created successfully",
 		)
 	}
-}
 
-func GetOneOrgHandler(os organization.Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rctx := r.Context()
-		user_id := rctx.Value("user_id").(string)
+func (h *org_handler) HandleFindOne(w http.ResponseWriter, r *http.Request){
+	rctx := r.Context()
+	user_id := rctx.Value("user_id").(string)
 
-		org_id := strings.TrimPrefix(r.URL.Path, "/api/organizations/")
-		if org_id == "" {
-			utils.ResponseWithSuccess[any](
-				w,
-				http.StatusNotFound,
-				nil,
-				"Organization id not specified",
-			)
-			return
-		}
+	org_id := r.PathValue("org_id")
 
-		org, err := os.FindById(user_id, org_id)
+	org, err := h.org_service.FindById(user_id, org_id)
 
-		if err != nil {
-			utils.ResponseWithSuccess[any](
-				w,
-				http.StatusOK,
-				nil,
-				err.Error(),
-			)		
-			return
-		}
-
-		if org == nil {
-			utils.ResponseWithError(
-				w,
-				http.StatusNotFound,
-				nil,
-				"Organization not found",
-			)
-			return
-		}
-
-		utils.ResponseWithSuccess(
+	if err != nil {
+		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusOK,
-			org,
-			"Organization retrieved successfully",
-		)
+			nil,
+			err.Error(),
+		)		
+		return
 	}
-}
 
-func ListMyOrgHandler(os organization.Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rctx := r.Context()
-		user_id := rctx.Value("user_id").(string)
-
-		orguses, err := os.ListMyOrgs(user_id)
-		if err != nil {
-			utils.ResponseWithError(
-				w,
-				http.StatusInternalServerError,
-				nil,
-				"Internal server error",
-			)
-			return
-		}
-
-		formatted := dto.NewListMyOrgResponse(orguses) 
-
-		utils.ResponseWithSuccess(
+	if org == nil {
+		utils.ResponseWithError(
 			w,
-			http.StatusOK,
-			&formatted,
-			"Organization users retrieved successfuly",
+			http.StatusNotFound,
+			nil,
+			"Organization not found",
 		)
+		return
 	}
+
+	utils.ResponseWithSuccess(
+		w,
+		http.StatusOK,
+		org,
+		"Organization retrieved successfully",
+	)
 }
 
-func UpdateOneOrgHandler(os organization.Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rctx := r.Context()
-		user_id := rctx.Value("user_id").(string)
+func (h *org_handler) HandleListMyOrganizations(w http.ResponseWriter, r *http.Request) {
+	rctx := r.Context()
+	user_id := rctx.Value("user_id").(string)
 
-		org_id := strings.TrimPrefix(r.URL.Path, "/api/organizations/")
-		if org_id == "" {
-			utils.ResponseWithSuccess[any](
-				w,
-				http.StatusNotFound,
-				nil,
-				"Organization id not specified",
-			)
-			return
-		}
-
-		var body dto.CreateOrgDto
-
-		if r.Body == nil {
-			fmt.Println("Update one organization failed, empty body")
-			utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
-			return
-		}
-
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&body); err != nil {
-			fmt.Println("Update one organization failed, ", err.Error())
-			utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
-			return
-		}
-
-		if _, err := body.Validate(); err != nil {
-			utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
-		}
-
-		org, err := os.FindByIdAndRole(
-			user_id,
-			org_id,
-			[]string{"owner"},
-		)
-
-		if err != nil {
-			utils.ResponseWithSuccess[any](
-				w,
-				http.StatusNotFound,
-				nil,
-				"Organization not found",
-			)
-			return
-		}
-
-		if org == nil {
-			utils.ResponseWithError(
-				w,
-				http.StatusNotFound,
-				nil,
-				"Organization not found",
-			)
-			return
-		}
-
-		if org.Role != "owner" { 
-			utils.ResponseWithError(
-				w,
-				http.StatusForbidden,
-				nil,
-				"Insufficient permission to update organization",
-			)
-			return
-		}
-
-		org.Name = pgtype.Text{String: body.Name, Valid: true}
-
-		new_org, err := os.UpdateOne(org)
-		
-		if err != nil {
-			fmt.Println("Update one org failed, ", err)
-			utils.ResponseWithSuccess[any](
-				w,
-				http.StatusInternalServerError,
-				nil,
-				"Internal server error",
-			)
-			return
-		}
-
-		utils.ResponseWithSuccess(
+	orguses, err := h.org_service.ListMyOrgs(user_id)
+	if err != nil {
+		utils.ResponseWithError(
 			w,
-			http.StatusOK,
-			new_org,
-			"Organization updated successfuly",
+			http.StatusInternalServerError,
+			nil,
+			"Internal server error",
 		)
+		return
 	}
+
+	formatted := dto.NewListMyOrgResponse(orguses) 
+
+	utils.ResponseWithSuccess(
+		w,
+		http.StatusOK,
+		&formatted,
+		"Organization users retrieved successfuly",
+	)
 }
 
-func DeleteOneOrgHandler(os organization.Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rctx := r.Context()
-		user_id := rctx.Value("user_id").(string)
+func (h *org_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
+	rctx := r.Context()
+	user_id := rctx.Value("user_id").(string)
 
-		org_id := strings.TrimPrefix(r.URL.Path, "/api/organizations/")
-		if org_id == "" {
-			utils.ResponseWithSuccess[any](
-				w,
-				http.StatusNotFound,
-				nil,
-				"Organization id not specified",
-			)
-			return
-		}
+	org_id := r.PathValue("org_id")
 
-		org, err := os.FindByIdAndRole(
-			user_id,
-			org_id,
-			[]string{"owner"},
+	var body dto.CreateOrgDto
+
+	if r.Body == nil {
+		fmt.Println("Update one organization failed, empty body")
+		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&body); err != nil {
+		fmt.Println("Update one organization failed, ", err.Error())
+		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
+		return
+	}
+
+	if _, err := body.Validate(); err != nil {
+		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
+	}
+
+	org, err := h.org_service.FindByIdAndRole(
+		user_id,
+		org_id,
+		[]string{"owner"},
+	)
+
+	if err != nil {
+		utils.ResponseWithSuccess[any](
+			w,
+			http.StatusNotFound,
+			nil,
+			"Organization not found",
 		)
+		return
+	}
 
-		if err != nil {
-			utils.ResponseWithSuccess[any](
-				w,
-				http.StatusNotFound,
-				nil,
-				"Organization not found",
-			)
-			return
-		}
+	if org == nil {
+		utils.ResponseWithError(
+			w,
+			http.StatusNotFound,
+			nil,
+			"Organization not found",
+		)
+		return
+	}
 
-		if org == nil {
-			utils.ResponseWithSuccess[any](
-				w,
-				http.StatusNoContent,
-				nil,
-				"Organization updated successfuly",
-			)
-			return
-		}
+	if org.Role != "owner" { 
+		utils.ResponseWithError(
+			w,
+			http.StatusForbidden,
+			nil,
+			"Insufficient permission to update organization",
+		)
+		return
+	}
 
-		if org.Role != "owner" { 
-			utils.ResponseWithError(
-				w,
-				http.StatusForbidden,
-				nil,
-				"Insufficient permission to update organization",
-			)
-			return
-		}
+	org.Name = pgtype.Text{String: body.Name, Valid: true}
 
-		err = os.DeleteOne(org.OrgID.String())
+	new_org, err := h.org_service.UpdateOne(org)
+	
+	if err != nil {
+		fmt.Println("Update one org failed, ", err)
+		utils.ResponseWithSuccess[any](
+			w,
+			http.StatusInternalServerError,
+			nil,
+			"Internal server error",
+		)
+		return
+	}
 
-		if err != nil {
-			utils.ResponseWithError(
-				w,
-				http.StatusInternalServerError,
-				nil,
-				"Internal server error",
-			)
-			return
-		}
+	utils.ResponseWithSuccess(
+		w,
+		http.StatusOK,
+		new_org,
+		"Organization updated successfuly",
+	)
+}
 
+func (h *org_handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	rctx := r.Context()
+	user_id := rctx.Value("user_id").(string)
+
+	org_id := r.PathValue("org_id")
+
+	org, err := h.org_service.FindByIdAndRole(
+		user_id,
+		org_id,
+		[]string{"owner"},
+	)
+
+	if err != nil {
+		utils.ResponseWithSuccess[any](
+			w,
+			http.StatusNotFound,
+			nil,
+			"Organization not found",
+		)
+		return
+	}
+
+	if org == nil {
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusNoContent,
 			nil,
 			"Organization updated successfuly",
 		)
+		return
 	}
+
+	if org.Role != "owner" { 
+		utils.ResponseWithError(
+			w,
+			http.StatusForbidden,
+			nil,
+			"Insufficient permission to update organization",
+		)
+		return
+	}
+
+	err = h.org_service.DeleteOne(org.OrgID.String())
+
+	if err != nil {
+		utils.ResponseWithError(
+			w,
+			http.StatusInternalServerError,
+			nil,
+			"Internal server error",
+		)
+		return
+	}
+
+	utils.ResponseWithSuccess[any](
+		w,
+		http.StatusNoContent,
+		nil,
+		"Organization updated successfuly",
+	)
 }
