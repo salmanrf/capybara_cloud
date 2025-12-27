@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/salmanrf/capybara-cloud/api/routes"
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/auth"
@@ -26,15 +27,30 @@ func NewAPIServer(
 	project_service project.Service,
 	jwt_validator auth_utils.JWT,
 ) http.Handler {
-	mux := http.NewServeMux()
+	router := chi.NewRouter()
 
-	routes.SetupAuthRouter(mux, auth_service, user_service, jwt_validator)
-	routes.SetupOrganizationRouter(mux, org_service, jwt_validator)
-	routes.SetupProjectRouter(mux, project_service, jwt_validator)
-	routes.SetupApplicationRouter(mux, application_service, jwt_validator)
-	
+	router.Route("/api", func (r chi.Router) {
+		r.Mount("/applications", routes.SetupApplicationRouter(
+			application_service,
+			jwt_validator,
+		))
+		r.Mount("/organizations", routes.SetupOrganizationRouter(
+			org_service,
+			jwt_validator,
+		))
+		r.Mount("/auth", routes.SetupAuthRouter(
+			auth_service,
+			user_service,
+			jwt_validator,
+		))
+		r.Mount("/projects", routes.SetupProjectRouter(
+			project_service,
+			jwt_validator,
+		))
+	})
+
 	s := api_server{
-		mux,
+		router,
 	}
 
 	return s

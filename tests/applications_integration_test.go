@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,8 +10,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/salmanrf/capybara-cloud/api"
 	"github.com/salmanrf/capybara-cloud/api/routes"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
@@ -20,24 +19,19 @@ import (
 )
 
 func TestCreateApplication(t *testing.T) {
-	test_ctx := context.Background()
-	
-	user_service := &StubUserService{}
-	auth_service := &StubAuthService{}
-	org_service := &StubOrgService{}
-	project_service := &StubProjectService{}
 	application_service := &StubApplicationService{}
 	jwt_validator := &StubJwtValidator{}
+	
+	mux := chi.NewRouter()
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, jwt_validator))
 
-	server := api.NewAPIServer(
-		test_ctx,
-		application_service,
-		user_service,
-		auth_service,
-		org_service,
-		project_service,
-		jwt_validator,
-	)
+	type api_server struct {
+		http.Handler
+	}
+
+	api := api_server{
+		mux,
+	}
 
 	sid_cookie := &http.Cookie{
 		Name: "sid",
@@ -51,9 +45,7 @@ func TestCreateApplication(t *testing.T) {
 	
 	t.Run("should returns status code 201 and the new application on success", func (t *testing.T) {
 		defer func () {
-			application_service.create_return = nil
-			application_service.create_n_calls = 0
-			application_service.create_calls_arg1 = []string{}
+			application_service.Clear()
 		}()
 		
 		expected_app_uuid := pgtype.UUID{}
@@ -88,7 +80,7 @@ func TestCreateApplication(t *testing.T) {
 		res := httptest.NewRecorder()
 		req.AddCookie(sid_cookie)
 
-		server.ServeHTTP(res, req)
+		api.ServeHTTP(res, req)
 
 		got_status := res.Result().StatusCode
 		want_status := http.StatusCreated
@@ -128,9 +120,7 @@ func TestCreateApplication(t *testing.T) {
 
 	t.Run("should create application on behalf of logged in user", func (t *testing.T) {
 		defer func () {
-			application_service.create_return = nil
-			application_service.create_n_calls = 0
-			application_service.create_calls_arg1 = []string{}
+			application_service.Clear()
 		}()
 		
 		expected_user_id := "123"
@@ -159,7 +149,7 @@ func TestCreateApplication(t *testing.T) {
 		res := httptest.NewRecorder()
 		req.AddCookie(sid_cookie)
 
-		server.ServeHTTP(res, req)
+		api.ServeHTTP(res, req)
 
 		got_service_called := application_service.create_n_calls
 		want_service_called := 1
@@ -178,10 +168,7 @@ func TestCreateApplication(t *testing.T) {
 
 	t.Run("should returns 403 error if doesn't have enough permission", func (t *testing.T) {
 		defer func () {
-			application_service.create_return = nil
-			application_service.create_err = nil
-			application_service.create_n_calls = 0
-			application_service.create_calls_arg1 = []string{}
+			application_service.Clear()
 		}()
 
 		application_service.create_err = errors.New("permission_denied")
@@ -212,7 +199,7 @@ func TestCreateApplication(t *testing.T) {
 		res := httptest.NewRecorder()
 		req.AddCookie(sid_cookie)
 
-		server.ServeHTTP(res, req)
+		api.ServeHTTP(res, req)
 
 		got_status_code := res.Result().StatusCode
 		want_status_code := http.StatusForbidden
@@ -226,7 +213,7 @@ func TestCreateApplication(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPost, "/api/applications", nil)
 		res := httptest.NewRecorder()
 
-		server.ServeHTTP(res, req)
+		api.ServeHTTP(res, req)
 
 		got_status := res.Result().StatusCode
 		want_status := http.StatusUnauthorized
@@ -257,13 +244,17 @@ func TestCreateApplication(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(fmt.Sprintf("returns 422 on %s", tt.desc), func (t *testing.T) {
+				defer func () {
+					application_service.Clear()
+				}()
+				
 				payload, _ := tt.body.(string)
 				req_body := bytes.NewBuffer([]byte(payload))
 				req, _ := http.NewRequest(http.MethodPost, "/api/applications", req_body)
 				res := httptest.NewRecorder()
 				req.AddCookie(sid_cookie)
 
-				server.ServeHTTP(res, req)
+				api.ServeHTTP(res, req)
 
 				got_status := res.Result().StatusCode
 				want_status := http.StatusUnprocessableEntity
@@ -324,13 +315,17 @@ func TestCreateApplication(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(fmt.Sprintf("returns 400 on %s", tt.desc), func (t *testing.T) {
+				defer func () {
+					application_service.Clear()
+				}()
+				
 				payload, _ := tt.body.(string)
 				req_body := bytes.NewBuffer([]byte(payload))
 				req, _ := http.NewRequest(http.MethodPost, "/api/applications", req_body)
 				res := httptest.NewRecorder()
 				req.AddCookie(sid_cookie)
 
-				server.ServeHTTP(res, req)
+				api.ServeHTTP(res, req)
 
 				got_status := res.Result().StatusCode
 				want_status := http.StatusBadRequest
@@ -344,12 +339,11 @@ func TestCreateApplication(t *testing.T) {
 }
 
 func TestUpdateApplication(t *testing.T) {
-	mux := http.NewServeMux()
-
 	application_service := &StubApplicationService{}
 	jwt_validator := &StubJwtValidator{}
 	
-	routes.SetupApplicationRouter(mux, application_service, jwt_validator)
+	mux := chi.NewRouter()
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler
@@ -600,12 +594,11 @@ func TestUpdateApplication(t *testing.T) {
 }
 
 func TestFindOneApplication(t *testing.T) {
-	mux := http.NewServeMux()
-	
 	application_service := &StubApplicationService{}
 	jwt_validator := &StubJwtValidator{}
 	
-	routes.SetupApplicationRouter(mux, application_service, jwt_validator)
+	mux := chi.NewRouter()
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler

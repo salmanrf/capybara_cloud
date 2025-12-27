@@ -2,44 +2,55 @@ package routes
 
 import (
 	"net/http"
-	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/salmanrf/capybara-cloud/api/handlers"
 	"github.com/salmanrf/capybara-cloud/api/middleware"
 	"github.com/salmanrf/capybara-cloud/internal/organization"
-	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
+	"github.com/salmanrf/capybara-cloud/pkg/auth"
+	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
-func SetupOrganizationRouter(mux *http.ServeMux, os organization.Service, jwt_validator auth_utils.JWT) {
-	mux.Handle(
-		"POST /api/organizations", 
-		middleware.LoginGuard(jwt_validator, handlers.CreateOrgHandler(os)),
-	)
+func SetupOrganizationRouter(org_service organization.Service, jwt_validator auth.JWT) chi.Router {
+	r := chi.NewRouter()
 
-	get_one_handler := handlers.GetOneOrgHandler(os)
-	list_handler := handlers.ListMyOrgHandler(os)
-	
-	mux.Handle(
-		"GET /api/organizations/", 
-		middleware.LoginGuard(jwt_validator, http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
-			endpoint := strings.TrimPrefix(r.URL.Path, "/api/organizations") 
+	org_handlers := handlers.NewOrgHandlers(org_service)
 
-			if endpoint == "/" {
-				list_handler(w, r)
-				return
-			}
+	// Handle base path - GET for list, POST for create
+	r.Post("/", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(org_handlers.HandleCreate),
+	))
 
-			get_one_handler(w, r)
-		})),
-	)
+	r.Get("/", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(org_handlers.HandleListMyOrganizations),
+	))
 
-	mux.Handle(
-		"PUT /api/organizations/", 
-		middleware.LoginGuard(jwt_validator, handlers.UpdateOneOrgHandler(os)),
-	)
+	// Handle requests to base path with methods that require org_id
+	r.Put("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		utils.ResponseWithError(w, http.StatusNotFound, nil, "Organization ID required")
+	}))
 
-	mux.Handle(
-		"DELETE /api/organizations/", 
-		middleware.LoginGuard(jwt_validator, handlers.DeleteOneOrgHandler(os)),
-	)
+	r.Delete("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		utils.ResponseWithError(w, http.StatusNotFound, nil, "Organization ID required")
+	}))
+
+	// Routes for specific organization
+	r.Get("/{org_id}", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(org_handlers.HandleFindOne),
+	))
+
+	r.Put("/{org_id}", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(org_handlers.HandleUpdate),
+	))
+
+	r.Delete("/{org_id}", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(org_handlers.HandleDelete),
+	))
+
+	return r
 }
