@@ -10,6 +10,62 @@ import (
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
+func FindOneApplicationHandler(app_service application.Service) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		app_id, _ := r.Context().Value("app_id").(string)
+		user_id, _ := r.Context().Value("user_id").(string)
+
+		app, err :=  app_service.FindOne(app_id, user_id)
+
+		if err != nil {
+			errmsg := err.Error()
+			switch errmsg {
+			case "permission_denied":
+				utils.ResponseWithError(
+					w,
+					http.StatusForbidden,
+					nil,
+					"Internal server error",
+				)
+				return
+			case "not_found":
+				utils.ResponseWithError(
+					w,
+					http.StatusInternalServerError,
+					nil,
+					"Internal server error",
+				)
+				return
+			default:
+				utils.ResponseWithError(
+					w,
+					http.StatusInternalServerError,
+					nil,
+					"Internal server error",
+				)
+				return	
+			}
+		}
+		
+		if app == nil {
+			utils.ResponseWithError(
+				w,
+				http.StatusNotFound,
+				nil,
+				"Not found",
+			)
+			return
+		}
+		
+		utils.ResponseWithSuccess(
+			w,
+			http.StatusOK,
+			&app,
+			"Application retrieved successfully",
+		)
+	}
+}
+
 func CreateApplicationHandler(app_service application.Service) http.HandlerFunc {
 	return func (w http.ResponseWriter, r *http.Request) {
 		var body dto.CreateApplicationDto
@@ -52,7 +108,7 @@ func CreateApplicationHandler(app_service application.Service) http.HandlerFunc 
 			}
 			return
 		}
-		
+
 		utils.ResponseWithSuccess(
 			w,
 			http.StatusCreated,

@@ -16,7 +16,7 @@ WHERE
 RETURNING *;
 
 -- name: FindOneApplicationWithProjectMember :one
-SELECT "app".*, "pm".role "role"
+SELECT "app".*, "pm".project_id pm_project_id, "pm".role role
 FROM 
   "applications" AS "app"
 LEFT JOIN 
@@ -26,5 +26,5 @@ LEFT JOIN
       AND
       "pm".user_id = $2
 WHERE 
-  "app".app_id = $1 AND "pm".role IS NOT NULL
+  "app".app_id = $1
 LIMIT 1;
