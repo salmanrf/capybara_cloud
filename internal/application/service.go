@@ -17,6 +17,7 @@ type Service interface {
 	Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error)
 	Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error)
 	FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error)
+	CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error)
 }
 
 type service struct {
@@ -122,4 +123,45 @@ func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicatio
 	}
 
 	return &updated_app, nil
+}
+
+func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error) {
+	app_uuid := pgtype.UUID{}
+	app_uuid.Scan(app_id)
+	user_uuid := pgtype.UUID{}
+	user_uuid.Scan(user_id)
+
+	app_with_pm, err := s.queries.FindOneApplicationWithProjectMember(
+		s.ctx,
+		database.FindOneApplicationWithProjectMemberParams{
+			AppID: app_uuid,
+			UserID: user_uuid,
+		},
+	)
+
+	if !app_with_pm.AppID.Valid {
+		return nil, nil
+	}
+
+	if !app_with_pm.PmProjectID.Valid {
+		return nil, errors.New("permission_denied")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	app_cfg, err := s.queries.CreateApplicationConfig(
+		s.ctx,
+		database.CreateApplicationConfigParams{
+			AppID: app_uuid,
+			VariablesJson: []byte(dto.VariablesJSON),
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	
+	return &app_cfg, nil
 }

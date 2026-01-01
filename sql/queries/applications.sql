@@ -28,3 +28,10 @@ LEFT JOIN
 WHERE 
   "app".app_id = $1
 LIMIT 1;
+
+-- name: CreateApplicationConfig :one
+INSERT INTO "application_configs" (
+  app_id,
+  variables_json
+)
+VALUES ($1, $2) RETURNING *;
