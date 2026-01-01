@@ -209,11 +209,11 @@ func (h *app_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request) {
-	var body dto.CreateApplicationDto
-
-	// rctx := r.Context()
-	// user_id, _ := rctx.Value("user_id").(string)
-
+	app_id := r.PathValue("app_id")
+	user_id := r.Context().Value("user_id").(string)
+	
+	var body dto.CreateApplicationConfigDto
+	
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
 		utils.ResponseWithError(
@@ -231,13 +231,25 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	app_cfg, err := h.app_service.CreateConfig(
+		app_id,
+		user_id,
+		body,
+	)
 	
-	utils.ResponseWithSuccess[any](
+	app_config_response := dto.ApplicationConfigResponse{
+		AppCfgID: app_cfg.AppCfgID.String(),
+		AppID: app_cfg.AppID.String(),
+		VariablesJson: string(app_cfg.VariablesJson),
+		ConfigVariables: *body.VariablesMap,
+		CreatedAt: app_cfg.CreatedAt.Time,
+		UpdatedAt: app_cfg.UpdatedAt.Time,
+	}
+
+	utils.ResponseWithSuccess(
 		w,
 		http.StatusOK,
-		nil,
-		"Application config created successfully",
+		&app_config_response,
+		"Bad request",
 	)
 }
-
-	

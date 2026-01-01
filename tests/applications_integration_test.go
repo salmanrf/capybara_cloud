@@ -761,7 +761,7 @@ func TestFindOneApplication(t *testing.T) {
 		}
 	})
 
-	t.Run("should call service properly", func (t *testing.T) {
+	t.Run("should call service method properly", func (t *testing.T) {
 		tests := []struct{
 			app_id string
 		}{
