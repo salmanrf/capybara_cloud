@@ -157,6 +157,74 @@ func TestCreateApplicationConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("should return status code 404 on not_found errors", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+		
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		jwt_validator.validate_return = mock_user_id
+		application_service.create_config_err = errors.New("not_found")
+
+		body_string := `
+			{
+				"variables": {
+					"foo": "bar"
+				}
+			}
+		`
+		req_body := bytes.NewBuffer([]byte(body_string))
+		req, _ := http.NewRequest(
+			http.MethodPost,
+			fmt.Sprintf("/api/applications/%s/configs", expected_app_id),
+			req_body,
+		)
+		req.AddCookie(sid_cookie)
+
+		res := httptest.NewRecorder()
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusNotFound
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d", got_status, want_status)
+		}
+	})
+
+	t.Run("should return status code 403 on permission_denied errors", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+		
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		jwt_validator.validate_return = mock_user_id
+		application_service.create_config_err = errors.New("permission_denied")
+
+		body_string := `
+			{
+				"variables": {
+					"foo": "bar"
+				}
+			}
+		`
+		req_body := bytes.NewBuffer([]byte(body_string))
+		req, _ := http.NewRequest(
+			http.MethodPost,
+			fmt.Sprintf("/api/applications/%s/configs", expected_app_id),
+			req_body,
+		)
+		req.AddCookie(sid_cookie)
+
+		res := httptest.NewRecorder()
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusForbidden
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d", got_status, want_status)
+		}
+	})
+	
 	t.Run("should return status code 500 on other errors", func (t *testing.T) {
 		defer func() {
 			application_service.Clear()

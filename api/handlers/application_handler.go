@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/salmanrf/capybara-cloud/internal/application"
@@ -238,16 +237,34 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 		body,
 	)
 	if err != nil {
+		errmsg := err.Error()
+		if errmsg == "permission_denied" {
+			utils.ResponseWithError(
+				w,
+				http.StatusForbidden,
+				nil,
+				"Insufficient permission to update application",
+			)
+			return	
+		} 
+		if errmsg == "not_found" {
+			utils.ResponseWithError(
+				w,
+				http.StatusNotFound,
+				nil,
+				"Not found",
+			)
+			return
+		}
+		
 		utils.ResponseWithError(
 			w,
 			http.StatusInternalServerError,
 			nil,
-			err.Error(),
+			"Internal server error",
 		)
 		return
 	}
-
-	fmt.Println("APP CONFIG", app_cfg)
 	
 	app_config_response := dto.ApplicationConfigResponse{
 		AppCfgID: app_cfg.AppCfgID.String(),
