@@ -16,7 +16,7 @@ WHERE
 RETURNING *;
 
 -- name: FindOneApplicationWithProjectMember :one
-SELECT "app".*, "pm".project_id pm_project_id, "pm".role role
+SELECT "app".*, sqlc.embed(config), "pm".project_id pm_project_id, "pm".role role
 FROM 
   "applications" AS "app"
 LEFT JOIN 
@@ -25,6 +25,10 @@ LEFT JOIN
       "pm".project_id = "app".project_id
       AND
       "pm".user_id = $2
+LEFT JOIN
+  "application_configs" as "config"
+    ON
+      "config".app_id = "app".app_id
 WHERE 
   "app".app_id = $1
 LIMIT 1;

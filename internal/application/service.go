@@ -20,6 +20,7 @@ type Service interface {
 	Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error)
 	FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error)
 	CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error)
+	FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error)
 }
 
 type service struct {
@@ -165,4 +166,51 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 	app_cfg, err := s.repository.UpsertConfig(params)
 
 	return app_cfg, nil
+}
+
+func (s *service) FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error) {
+	app_uuid := pgtype.UUID{}
+	app_uuid.Scan(app_id)
+	user_uuid := pgtype.UUID{}
+	user_uuid.Scan(user_id)
+
+	app_with_pm, err := s.repository.FindOneWithProjectMember(
+		database.FindOneApplicationWithProjectMemberParams{
+			AppID: app_uuid,
+			UserID: user_uuid,
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	if app_with_pm == nil || !app_with_pm.AppID.Valid {
+		return nil, errors.New("not_found")
+	}
+	if !app_with_pm.PmProjectID.Valid {
+		return nil, errors.New("permission_denied")
+	}
+	if !app_with_pm.ApplicationConfig.AppCfgID.Valid {
+		return nil, errors.New("not_found")
+	}
+
+	var configVariables map[string]any
+	if len(app_with_pm.ApplicationConfig.VariablesJson) > 0 {
+		if err := json.Unmarshal(app_with_pm.ApplicationConfig.VariablesJson, &configVariables); err != nil {
+			return nil, err
+		}
+	} else {
+		configVariables = make(map[string]any)
+	}
+
+	response := &dto.ApplicationConfigResponse{
+		AppCfgID:        app_with_pm.ApplicationConfig.AppCfgID.String(),
+		AppID:           app_with_pm.ApplicationConfig.AppID.String(),
+		VariablesJson:   string(app_with_pm.ApplicationConfig.VariablesJson),
+		ConfigVariables: configVariables,
+		CreatedAt:       app_with_pm.CreatedAt.Time,
+		UpdatedAt:       app_with_pm.UpdatedAt.Time,
+	}
+
+	return response, nil
 }
