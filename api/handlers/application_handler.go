@@ -14,10 +14,11 @@ type app_handler struct {
 }
 
 type AppHandlers interface {
-	HandleFindOne(w http.ResponseWriter, r *http.Request) 
+	HandleFindOne(w http.ResponseWriter, r *http.Request)
 	HandleCreate(w http.ResponseWriter, r *http.Request)
 	HandleUpdate(w http.ResponseWriter, r *http.Request)
 	HandleCreateConfig(w http.ResponseWriter, r *http.Request)
+	HandleFindOneConfig(w http.ResponseWriter, r *http.Request)
 }
 
 func NewAppHandlers(app_service application.Service) AppHandlers {
@@ -236,12 +237,41 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 		user_id,
 		body,
 	)
+	if err != nil {
+		errmsg := err.Error()
+		if errmsg == "permission_denied" {
+			utils.ResponseWithError(
+				w,
+				http.StatusForbidden,
+				nil,
+				"Insufficient permission to update application",
+			)
+			return	
+		} 
+		if errmsg == "not_found" {
+			utils.ResponseWithError(
+				w,
+				http.StatusNotFound,
+				nil,
+				"Not found",
+			)
+			return
+		}
+		
+		utils.ResponseWithError(
+			w,
+			http.StatusInternalServerError,
+			nil,
+			"Internal server error",
+		)
+		return
+	}
 	
 	app_config_response := dto.ApplicationConfigResponse{
 		AppCfgID: app_cfg.AppCfgID.String(),
 		AppID: app_cfg.AppID.String(),
 		VariablesJson: string(app_cfg.VariablesJson),
-		ConfigVariables: *body.VariablesMap,
+		ConfigVariables: body.Variables,
 		CreatedAt: app_cfg.CreatedAt.Time,
 		UpdatedAt: app_cfg.UpdatedAt.Time,
 	}
@@ -251,5 +281,49 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 		http.StatusOK,
 		&app_config_response,
 		"Bad request",
+	)
+}
+
+func (h *app_handler) HandleFindOneConfig(w http.ResponseWriter, r *http.Request) {
+	app_id := r.PathValue("app_id")
+	user_id, _ := r.Context().Value("user_id").(string)
+
+	config, err := h.app_service.FindOneConfig(app_id, user_id)
+
+	if err != nil {
+		errmsg := err.Error()
+		switch errmsg {
+		case "permission_denied":
+			utils.ResponseWithError(
+				w,
+				http.StatusForbidden,
+				nil,
+				"Insufficient permission to access application config",
+			)
+			return
+		case "not_found":
+			utils.ResponseWithError(
+				w,
+				http.StatusNotFound,
+				nil,
+				"Application not found",
+			)
+			return
+		default:
+			utils.ResponseWithError(
+				w,
+				http.StatusInternalServerError,
+				nil,
+				"Internal server error",
+			)
+			return
+		}
+	}
+
+	utils.ResponseWithSuccess(
+		w,
+		http.StatusOK,
+		config,
+		"Application config retrieved successfully",
 	)
 }

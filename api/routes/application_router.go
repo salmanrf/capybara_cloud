@@ -30,6 +30,11 @@ func SetupApplicationRouter(application_service application.Service, jwt_validat
 		http.HandlerFunc(app_handlers.HandleUpdate),
 	))
 
+	r.Get("/{app_id}/configs", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(app_handlers.HandleFindOneConfig),
+	))
+
 	r.Post("/{app_id}/configs", middleware.LoginGuard(
 		jwt_validator,
 		http.HandlerFunc(app_handlers.HandleCreateConfig),

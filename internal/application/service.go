@@ -1,7 +1,9 @@
 package application
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -18,20 +20,26 @@ type Service interface {
 	Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error)
 	FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error)
 	CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error)
+	FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error)
 }
 
 type service struct {
 	ctx context.Context
 	conn *pgxpool.Pool
-	queries *database.Queries
+	repository ApplicationRepository
 	project_service project.Service
 }
 
-func NewService(ctx context.Context, conn *pgxpool.Pool, queries *database.Queries, project_service project.Service) Service {
+func NewService(
+	ctx context.Context, 
+	conn *pgxpool.Pool, 
+	repository ApplicationRepository,
+	project_service project.Service,
+) Service {
 	return &service{
 		ctx,
 		conn,
-		queries,
+		repository,
 		project_service,
 	}
 }
@@ -50,20 +58,19 @@ func (s *service) Create(user_id string, dto dto.CreateApplicationDto) (*databas
 
 	project_uuid := pgtype.UUID{}
 	project_uuid.Scan(dto.ProjectID)
-	
-	dbparams := database.CreateApplicationParams{
+
+	params := database.CreateApplicationParams{
 		Type: dto.Type,
 		ProjectID: project_uuid,
 		Name: dto.Name,
 	}
 
-	new_application, err := s.queries.CreateApplication(s.ctx, dbparams)
-
+	new_application, err := s.repository.CreateApplication(params)
 	if err != nil {
 		return nil, err
 	}
-	
-	return &new_application, nil
+
+	return new_application, nil
 }
 
 func (s *service) FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error) {
@@ -72,8 +79,7 @@ func (s *service) FindOne(app_id string, user_id string) (*database.FindOneAppli
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	app_with_pm, err := s.queries.FindOneApplicationWithProjectMember(
-		s.ctx,
+	app_with_pm, err := s.repository.FindOneWithProjectMember(
 		database.FindOneApplicationWithProjectMemberParams{
 			AppID: app_uuid,
 			UserID: user_uuid,
@@ -88,7 +94,7 @@ func (s *service) FindOne(app_id string, user_id string) (*database.FindOneAppli
 		return nil, errors.New("permission_denied")
 	}
 	
-	return &app_with_pm, err
+	return app_with_pm, err
 }
 
 func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error) {
@@ -101,13 +107,12 @@ func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicatio
 		}
 		return nil, err
 	}
-	
+
 	if app_with_pm == nil {
 		return nil, errors.New("not_found")
 	}
 
-	updated_app, err := s.queries.UpdateOneApplication(
-		s.ctx,
+	updated_app, err := s.repository.UpdateOneApplication(
 		database.UpdateOneApplicationParams{
 			AppID: app_with_pm.AppID,
 			Name: dto.Name,
@@ -122,7 +127,7 @@ func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicatio
 		return nil, err
 	}
 
-	return &updated_app, nil
+	return updated_app, nil
 }
 
 func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error) {
@@ -131,37 +136,81 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	app_with_pm, err := s.queries.FindOneApplicationWithProjectMember(
-		s.ctx,
+	app_with_pm, err := s.repository.FindOneWithProjectMember(
 		database.FindOneApplicationWithProjectMemberParams{
 			AppID: app_uuid,
 			UserID: user_uuid,
 		},
 	)
 
-	if !app_with_pm.AppID.Valid {
-		return nil, nil
+	if err != nil {
+		return nil, err
 	}
-
+	if app_with_pm == nil || !app_with_pm.AppID.Valid {
+		return nil, errors.New("not_found")
+	}
 	if !app_with_pm.PmProjectID.Valid {
 		return nil, errors.New("permission_denied")
 	}
 
-	if err != nil {
+	variables_json := bytes.NewBuffer([]byte{})
+	encoder := json.NewEncoder(variables_json)
+	if err := encoder.Encode(dto.Variables); err != nil {
 		return nil, err
 	}
 
-	app_cfg, err := s.queries.CreateApplicationConfig(
-		s.ctx,
-		database.CreateApplicationConfigParams{
+	params := database.CreateApplicationConfigParams{
+		AppID: app_uuid,
+		VariablesJson: variables_json.Bytes(),
+	} 
+	app_cfg, err := s.repository.UpsertConfig(params)
+
+	return app_cfg, nil
+}
+
+func (s *service) FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error) {
+	app_uuid := pgtype.UUID{}
+	app_uuid.Scan(app_id)
+	user_uuid := pgtype.UUID{}
+	user_uuid.Scan(user_id)
+
+	app_with_pm, err := s.repository.FindOneWithProjectMember(
+		database.FindOneApplicationWithProjectMemberParams{
 			AppID: app_uuid,
-			VariablesJson: []byte(dto.VariablesJSON),
+			UserID: user_uuid,
 		},
 	)
 
 	if err != nil {
 		return nil, err
 	}
-	
-	return &app_cfg, nil
+	if app_with_pm == nil || !app_with_pm.AppID.Valid {
+		return nil, errors.New("not_found")
+	}
+	if !app_with_pm.PmProjectID.Valid {
+		return nil, errors.New("permission_denied")
+	}
+	if !app_with_pm.ApplicationConfig.AppCfgID.Valid {
+		return nil, errors.New("not_found")
+	}
+
+	var configVariables map[string]any
+	if len(app_with_pm.ApplicationConfig.VariablesJson) > 0 {
+		if err := json.Unmarshal(app_with_pm.ApplicationConfig.VariablesJson, &configVariables); err != nil {
+			return nil, err
+		}
+	} else {
+		configVariables = make(map[string]any)
+	}
+
+	response := &dto.ApplicationConfigResponse{
+		AppCfgID:        app_with_pm.ApplicationConfig.AppCfgID.String(),
+		AppID:           app_with_pm.ApplicationConfig.AppID.String(),
+		VariablesJson:   string(app_with_pm.ApplicationConfig.VariablesJson),
+		ConfigVariables: configVariables,
+		CreatedAt:       app_with_pm.CreatedAt.Time,
+		UpdatedAt:       app_with_pm.UpdatedAt.Time,
+	}
+
+	return response, nil
 }

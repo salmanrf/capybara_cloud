@@ -152,6 +152,11 @@ type StubApplicationService struct {
 	find_one_error error
 	find_one_calls_arg1 []string
 	find_one_calls_arg2 []string
+	find_one_config_calls_arg1 []string
+	find_one_config_calls_arg2 []string
+	find_one_config_n_calls int
+	find_one_config_return *dto.ApplicationConfigResponse
+	find_one_config_error error
 }
 
 func (s *StubApplicationService) Clear() {
@@ -175,7 +180,12 @@ func (s *StubApplicationService) Clear() {
 	s.create_config_calls_arg2 = []string{}
 	s.create_config_calls_arg3 = []dto.CreateApplicationConfigDto{}
 	s.create_config_return = nil
-	s.create_err = nil
+	s.create_config_err = nil
+	s.find_one_config_n_calls = 0
+	s.find_one_config_calls_arg1 = []string{}
+	s.find_one_config_calls_arg2 = []string{}
+	s.find_one_config_return = nil
+	s.find_one_config_error = nil
 }
 
 func (s *StubApplicationService) Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error) {
@@ -207,11 +217,18 @@ func (s *StubApplicationService) CreateConfig(app_id string, user_id string, dto
 	return s.create_config_return, s.create_config_err
 }
 
+func (s *StubApplicationService) FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error) {
+	s.find_one_config_n_calls += 1
+	s.find_one_config_calls_arg1 = append(s.find_one_config_calls_arg1, app_id)
+	s.find_one_config_calls_arg2 = append(s.find_one_config_calls_arg2, user_id)
+	return s.find_one_config_return, s.find_one_config_error
+}
+
 type StubJwtValidator struct {
 	validate_return string
-	validate_error error 
+	validate_error error
 	make_return string
-	make_error error 
+	make_error error
 }
 
 func (v *StubJwtValidator) ValidateJWT(token, secret string) (string, error) {

@@ -65,11 +65,12 @@ func main() {
 	}
 
 	queries := database.New(db_conn)
+	application_repository := application.NewRepository(ctx, queries)
 	user_service := user.NewService(ctx, queries)
 	auth_service := auth.NewService(ctx, user_service)
 	org_service := organization.NewService(ctx, db_conn, queries, user_service)
 	project_service := project.NewService(ctx, db_conn, queries, user_service)
-	application_service := application.NewService(ctx, db_conn, queries, project_service)
+	application_service := application.NewService(ctx, db_conn, application_repository, project_service)
 	jwt_utils := auth_utils.NewJWTUtils(os.Getenv("AUTH_JWT_SECRET"))
 	
 	api_server := api.NewAPIServer(

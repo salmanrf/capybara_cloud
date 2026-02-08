@@ -1,9 +1,8 @@
 package dto
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 )
@@ -21,8 +20,7 @@ type CreateApplicationDto struct {
 }
 
 type CreateApplicationConfigDto struct {
-	VariablesJSON string `json:"variables_json"`
-	VariablesMap *map[string]any
+	Variables map[string]any `json:"variables"`
 }
 
 type UpdateApplicationDto struct {
@@ -86,17 +84,28 @@ func (dto *UpdateApplicationDto) Validate() (bool, error) {
 func (dto *CreateApplicationConfigDto) Validate() (bool, error) {
 	valid := true
 	var validation_errors error = nil
-	var variables_map map[string]any
-	
-	buffer := bytes.NewBuffer([]byte(dto.VariablesJSON))
-	decoder := json.NewDecoder(buffer)
-	if err := decoder.Decode(&variables_map); err != nil {
-		valid = false
-		validation_errors = errors.Join(validation_errors, errors.New("invalid variables json"), err)
+
+	keyc := 0
+	for key, val := range dto.Variables {
+		switch t := val.(type) {
+		case string, float32, float64, int:
+			keyc += 1
+		default:
+			validation_errors = errors.Join(
+				validation_errors,
+				fmt.Errorf("%s is not a primitive data type: (%v) %v", key, t, val),
+			)
+			valid = false
+		}
 	}
-
-	dto.VariablesMap = &variables_map
-
+	if keyc == 0 {
+		validation_errors = errors.Join(
+			validation_errors, 
+			errors.New("config variables can't be an empty map"),
+		)
+		valid = false
+	}
+	
 	return valid, validation_errors
 } 
 
