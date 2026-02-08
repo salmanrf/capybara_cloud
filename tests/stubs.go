@@ -175,7 +175,7 @@ func (s *StubApplicationService) Clear() {
 	s.create_config_calls_arg2 = []string{}
 	s.create_config_calls_arg3 = []dto.CreateApplicationConfigDto{}
 	s.create_config_return = nil
-	s.create_err = nil
+	s.create_config_err = nil
 }
 
 func (s *StubApplicationService) Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error) {

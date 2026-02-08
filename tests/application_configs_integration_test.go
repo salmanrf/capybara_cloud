@@ -3,11 +3,13 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -70,7 +72,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("should returns status code 400 when validation failed", func (t *testing.T) {
+	t.Run("should return status code 400/422 when validation failed", func (t *testing.T) {
 		tests := []struct{
 			desc string
 			body any
@@ -80,7 +82,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"{}",
 			},
 			{
-				"empty variables_json",
+				"empty variables",
 				`
 				{
 					"foo": "bar"
@@ -88,26 +90,38 @@ func TestCreateApplicationConfig(t *testing.T) {
 				`,
 			},
 			{
-				"invalid variables_json 1",
+				"invalid variables 1",
 				`
 				{
-					"variables_json": "123"
+					"variables": "123"
 				}
 				`,
 			},
 			{
-				"invalid variables_json 2",
+				"invalid variables",
 				`
 				{
-					"variables_json": "{foo: bar}"
+					"variables": "{foo: bar}"
 				}
 				`,
 			},
 			{
-				"invalid variables_json 3",
+				"invalid variables",
 				`
 				{
-					"variables_json": "foo: bar"
+					"variables": "foo: bar"
+				}
+				`,
+			},
+			{
+				"invalid variables (non primitive data type)",
+				`
+				{
+					"variables": {
+						"foo": {
+							"bar": "baz"
+						}
+					}
 				}
 				`,
 			},
@@ -129,28 +143,60 @@ func TestCreateApplicationConfig(t *testing.T) {
 					fmt.Sprintf("/api/applications/%s/configs", expected_app_id),
 					req_body,
 				)
-				res := httptest.NewRecorder()
-
 				req.AddCookie(sid_cookie)
-
+				
+				res := httptest.NewRecorder()
 				api.ServeHTTP(res, req)
 
 				got_status := res.Result().StatusCode
-				want_status := http.StatusBadRequest
-
-				if got_status != want_status {
+				want_status := []int{http.StatusBadRequest, http.StatusUnprocessableEntity}
+				if slices.Index(want_status, got_status) == -1 {
 					t.Errorf("got status code %d, want %d\n", got_status, want_status)
 				}
 			})
 		}
 	})
 
-	t.Run("should returns status code 200 and the application config", func (t *testing.T) {
+	t.Run("should return status code 500 on other errors", func (t *testing.T) {
+		defer func() {
+			application_service.Clear()
+		}()
+		
+		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
+		jwt_validator.validate_return = mock_user_id
+		application_service.create_config_err = errors.New("internal server error")
+
+		body_string := `
+			{
+				"variables": {
+					"foo": "bar"
+				}
+			}
+		`
+		req_body := bytes.NewBuffer([]byte(body_string))
+		req, _ := http.NewRequest(
+			http.MethodPost,
+			fmt.Sprintf("/api/applications/%s/configs", expected_app_id),
+			req_body,
+		)
+		req.AddCookie(sid_cookie)
+
+		res := httptest.NewRecorder()
+		api.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusInternalServerError
+		if got_status != want_status {
+			t.Errorf("got status code %d, want %d", got_status, want_status)
+		}
+	})
+
+	t.Run("should return status code 200 and the application config", func (t *testing.T) {
 		varv_1 := "mongo://12345"
-		variables_json_1 := fmt.Sprintf(`{\"MONGO_URI\": \"%s\"}`, varv_1)
+		variables_1 := fmt.Sprintf(`{"MONGO_URI": "%s"}`, varv_1)
 		varv_21 := "abcd"
 		varv_22 := "zxcv"
-		variables_json_2 := fmt.Sprintf(`{\"AUTH0_CLIENT_ID\": \"%s\", \"AUTH0_CLIENT_SECRET\": \"%s\"}`, varv_21, varv_22)
+		variables_2 := fmt.Sprintf(`{"AUTH0_CLIENT_ID": "%s", "AUTH0_CLIENT_SECRET": "%s"}`, varv_21, varv_22)
 		
 		tests := []struct{
 			desc string
@@ -164,10 +210,10 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"817c42f9-a216-4475-a6e5-d98864bb5161",
 				fmt.Sprintf(`
 				{
-					"variables_json": "%s"
+					"variables": %s
 				}
-				`, variables_json_1),
-				variables_json_1,
+				`, variables_1),
+				variables_1,
 				map[string]any{
 					"MONGO_URI": varv_1, 
 				},
@@ -177,10 +223,10 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"eb29b17d-04c3-4895-a170-930c36766df7",
 				fmt.Sprintf(`
 				{
-					"variables_json": "%s"
+					"variables": %s
 				}
-				`, variables_json_2),
-				variables_json_2,
+				`, variables_2),
+				variables_2,
 				map[string]any{
 					"AUTH0_CLIENT_ID": varv_21,
 					"AUTH0_CLIENT_SECRET": varv_22,
@@ -256,24 +302,35 @@ func TestCreateApplicationConfig(t *testing.T) {
 			app_id string
 			user_id string
 			body string
+			expected_map map[string]any
 		}{
 			{
 				"12345",
 				"abcd",
 				`
 				{
-					"variables_json": "{}"
+					"variables": {
+						"A": "B"
+					}
 				}
 				`,
+				map[string]any{
+					"A": "B",
+				},
 			},
 			{
 				"67890",
 				"zxcv",
 				`
 				{
-					"variables_json": "{}"
+					"variables": {
+						"C": "D"
+					}
 				}
 				`,
+				map[string]any{
+					"C": "D",
+				},
 			},
 		}
 
@@ -292,8 +349,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 				payload := tt.body
 
 				expected_dto := dto.CreateApplicationConfigDto{
-					VariablesJSON: "{}",
-					VariablesMap: &map[string]any{},
+					Variables: tt.expected_map,
 				}
 
 				req_body := bytes.NewBuffer([]byte(payload))

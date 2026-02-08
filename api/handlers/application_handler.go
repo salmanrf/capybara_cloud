@@ -236,12 +236,21 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 		user_id,
 		body,
 	)
+	if err != nil {
+		utils.ResponseWithError(
+			w,
+			http.StatusInternalServerError,
+			nil,
+			err.Error(),
+		)
+		return
+	}
 	
 	app_config_response := dto.ApplicationConfigResponse{
 		AppCfgID: app_cfg.AppCfgID.String(),
 		AppID: app_cfg.AppID.String(),
 		VariablesJson: string(app_cfg.VariablesJson),
-		ConfigVariables: *body.VariablesMap,
+		ConfigVariables: body.Variables,
 		CreatedAt: app_cfg.CreatedAt.Time,
 		UpdatedAt: app_cfg.UpdatedAt.Time,
 	}

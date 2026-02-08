@@ -1,7 +1,9 @@
 package application
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -151,11 +153,16 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 		return nil, err
 	}
 
+	variables_json := bytes.NewBuffer([]byte{})
+	encoder := json.NewEncoder(variables_json)
+	if err := encoder.Encode(dto.Variables); err != nil {
+		return nil, err
+	}
 	app_cfg, err := s.queries.CreateApplicationConfig(
 		s.ctx,
 		database.CreateApplicationConfigParams{
 			AppID: app_uuid,
-			VariablesJson: []byte(dto.VariablesJSON),
+			VariablesJson: variables_json.Bytes(),
 		},
 	)
 
