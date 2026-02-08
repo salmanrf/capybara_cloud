@@ -209,9 +209,9 @@ func (s *StubApplicationService) CreateConfig(app_id string, user_id string, dto
 
 type StubJwtValidator struct {
 	validate_return string
-	validate_error error 
+	validate_error error
 	make_return string
-	make_error error 
+	make_error error
 }
 
 func (v *StubJwtValidator) ValidateJWT(token, secret string) (string, error) {

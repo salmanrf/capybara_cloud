@@ -13,7 +13,7 @@ type repository struct {
 
 type ApplicationRepository interface {
 	FindOneWithProjectMember(database.FindOneApplicationWithProjectMemberParams) (*database.FindOneApplicationWithProjectMemberRow, error)
-	CreateConfig(database.CreateApplicationConfigParams) (*database.ApplicationConfig, error)
+	UpsertConfig(database.CreateApplicationConfigParams) (*database.ApplicationConfig, error)
 	CreateApplication(database.CreateApplicationParams) (*database.Application, error)
 	UpdateOneApplication(database.UpdateOneApplicationParams) (*database.Application, error)
 }
@@ -34,7 +34,7 @@ func (r *repository) FindOneWithProjectMember(params database.FindOneApplication
 	return &app_with_pm, err
 }
 
-func (r *repository) CreateConfig(params database.CreateApplicationConfigParams) (*database.ApplicationConfig, error) {
+func (r *repository) UpsertConfig(params database.CreateApplicationConfigParams) (*database.ApplicationConfig, error) {
 	app_cfg, err := r.queries.CreateApplicationConfig(
 		r.ctx,
 		params,

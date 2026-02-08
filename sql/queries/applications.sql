@@ -34,4 +34,7 @@ INSERT INTO "application_configs" (
   app_id,
   variables_json
 )
-VALUES ($1, $2) RETURNING *;
+VALUES ($1, $2) 
+ON CONFLICT (app_id)
+DO UPDATE SET variables_json = $2, updated_at = NOW()
+RETURNING *;

@@ -145,9 +145,8 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 	if err != nil {
 		return nil, err
 	}
-
 	if app_with_pm == nil || !app_with_pm.AppID.Valid {
-		return nil, nil
+		return nil, errors.New("not_found")
 	}
 	if !app_with_pm.PmProjectID.Valid {
 		return nil, errors.New("permission_denied")
@@ -163,7 +162,7 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 		AppID: app_uuid,
 		VariablesJson: variables_json.Bytes(),
 	} 
-	app_cfg, err := s.repository.CreateConfig(params)
+	app_cfg, err := s.repository.UpsertConfig(params)
 
 	return app_cfg, nil
 }
