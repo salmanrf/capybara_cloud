@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/salmanrf/capybara-cloud/internal/application"
@@ -245,6 +246,8 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 		)
 		return
 	}
+
+	fmt.Println("APP CONFIG", app_cfg)
 	
 	app_config_response := dto.ApplicationConfigResponse{
 		AppCfgID: app_cfg.AppCfgID.String(),

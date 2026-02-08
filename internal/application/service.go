@@ -25,15 +25,20 @@ type Service interface {
 type service struct {
 	ctx context.Context
 	conn *pgxpool.Pool
-	queries *database.Queries
+	repository ApplicationRepository
 	project_service project.Service
 }
 
-func NewService(ctx context.Context, conn *pgxpool.Pool, queries *database.Queries, project_service project.Service) Service {
+func NewService(
+	ctx context.Context, 
+	conn *pgxpool.Pool, 
+	repository ApplicationRepository,
+	project_service project.Service,
+) Service {
 	return &service{
 		ctx,
 		conn,
-		queries,
+		repository,
 		project_service,
 	}
 }
@@ -52,20 +57,19 @@ func (s *service) Create(user_id string, dto dto.CreateApplicationDto) (*databas
 
 	project_uuid := pgtype.UUID{}
 	project_uuid.Scan(dto.ProjectID)
-	
-	dbparams := database.CreateApplicationParams{
+
+	params := database.CreateApplicationParams{
 		Type: dto.Type,
 		ProjectID: project_uuid,
 		Name: dto.Name,
 	}
 
-	new_application, err := s.queries.CreateApplication(s.ctx, dbparams)
-
+	new_application, err := s.repository.CreateApplication(params)
 	if err != nil {
 		return nil, err
 	}
-	
-	return &new_application, nil
+
+	return new_application, nil
 }
 
 func (s *service) FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error) {
@@ -74,8 +78,7 @@ func (s *service) FindOne(app_id string, user_id string) (*database.FindOneAppli
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	app_with_pm, err := s.queries.FindOneApplicationWithProjectMember(
-		s.ctx,
+	app_with_pm, err := s.repository.FindOneWithProjectMember(
 		database.FindOneApplicationWithProjectMemberParams{
 			AppID: app_uuid,
 			UserID: user_uuid,
@@ -90,7 +93,7 @@ func (s *service) FindOne(app_id string, user_id string) (*database.FindOneAppli
 		return nil, errors.New("permission_denied")
 	}
 	
-	return &app_with_pm, err
+	return app_with_pm, err
 }
 
 func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error) {
@@ -103,13 +106,12 @@ func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicatio
 		}
 		return nil, err
 	}
-	
+
 	if app_with_pm == nil {
 		return nil, errors.New("not_found")
 	}
 
-	updated_app, err := s.queries.UpdateOneApplication(
-		s.ctx,
+	updated_app, err := s.repository.UpdateOneApplication(
 		database.UpdateOneApplicationParams{
 			AppID: app_with_pm.AppID,
 			Name: dto.Name,
@@ -124,7 +126,7 @@ func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicatio
 		return nil, err
 	}
 
-	return &updated_app, nil
+	return updated_app, nil
 }
 
 func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error) {
@@ -133,24 +135,22 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	app_with_pm, err := s.queries.FindOneApplicationWithProjectMember(
-		s.ctx,
+	app_with_pm, err := s.repository.FindOneWithProjectMember(
 		database.FindOneApplicationWithProjectMemberParams{
 			AppID: app_uuid,
 			UserID: user_uuid,
 		},
 	)
 
-	if !app_with_pm.AppID.Valid {
-		return nil, nil
-	}
-
-	if !app_with_pm.PmProjectID.Valid {
-		return nil, errors.New("permission_denied")
-	}
-
 	if err != nil {
 		return nil, err
+	}
+
+	if app_with_pm == nil || !app_with_pm.AppID.Valid {
+		return nil, nil
+	}
+	if !app_with_pm.PmProjectID.Valid {
+		return nil, errors.New("permission_denied")
 	}
 
 	variables_json := bytes.NewBuffer([]byte{})
@@ -158,17 +158,12 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 	if err := encoder.Encode(dto.Variables); err != nil {
 		return nil, err
 	}
-	app_cfg, err := s.queries.CreateApplicationConfig(
-		s.ctx,
-		database.CreateApplicationConfigParams{
-			AppID: app_uuid,
-			VariablesJson: variables_json.Bytes(),
-		},
-	)
 
-	if err != nil {
-		return nil, err
-	}
-	
-	return &app_cfg, nil
+	params := database.CreateApplicationConfigParams{
+		AppID: app_uuid,
+		VariablesJson: variables_json.Bytes(),
+	} 
+	app_cfg, err := s.repository.CreateConfig(params)
+
+	return app_cfg, nil
 }
