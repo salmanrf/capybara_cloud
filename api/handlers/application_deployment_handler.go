@@ -1,0 +1,108 @@
+package handlers
+
+import (
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/salmanrf/capybara-cloud/internal/application"
+	"github.com/salmanrf/capybara-cloud/pkg/utils"
+)
+
+type deployment_handler struct {
+	deployment_service application.DeploymentService
+}
+
+type AppDeploymentHandlers interface {
+	HandleCreateOneDeployment(w http.ResponseWriter, r *http.Request) 
+}
+
+func NewAppDeploymentHandlers(deployment_service application.DeploymentService) AppDeploymentHandlers {
+	return &deployment_handler{
+		deployment_service,
+	}
+}
+
+func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r *http.Request) {
+	content_type := r.Header.Get("Content-Type");
+	if !strings.HasPrefix(content_type, "multipart/form-data") {
+		utils.ResponseWithError(
+			w,
+			http.StatusBadRequest,
+			nil,
+			fmt.Sprintf("content-type must be %s", "multipart/form-data"),
+		)
+		return
+	}
+
+	content_length, err := strconv.Atoi(r.Header.Get("Content-Length"));
+	if err != nil || content_length == 0 {
+		utils.ResponseWithError(
+			w,
+			http.StatusBadRequest,
+			nil,
+			"form-data mustn't be empty",
+		)
+		return
+	}
+	cfg := utils.GetConfig()
+	if content_length > cfg.MAX_DEPLOY_FORM_SIZE {
+		utils.ResponseWithError(
+			w,
+			http.StatusRequestEntityTooLarge,
+			nil,
+			fmt.Sprintf("form-data payload exceeds %d in size", cfg.MAX_DEPLOY_FORM_SIZE),
+		)
+		return
+	}
+
+	err = r.ParseMultipartForm(int64(cfg.MAX_DEPLOY_FORM_SIZE))
+	if err != nil {
+		errmsg := err.Error()
+		utils.ResponseWithError(
+			w,
+			http.StatusUnprocessableEntity,
+			nil,
+			errmsg,
+		)
+		return
+	}
+
+	bundle_file, file_headers, err := r.FormFile("bundle")
+	if err != nil {
+		errmsg := err.Error()
+		utils.ResponseWithError(
+			w,
+			http.StatusUnprocessableEntity,
+			nil,
+			errmsg,
+		)
+		return
+	}
+	if bundle_file == nil || file_headers == nil {
+		utils.ResponseWithError(
+			w,
+			http.StatusUnprocessableEntity,
+			nil,
+			"deployment 'bundle' file must be provided as .tar.gz (application/gzip) file",
+		)
+		return
+	}
+	if file_headers.Size > int64(cfg.MAX_DEPLOY_BUNDLE_SIZE) {
+		utils.ResponseWithError(
+			w,
+			http.StatusRequestEntityTooLarge,
+			nil,
+			fmt.Sprintf("form-data bundle file exceeds %d in size", cfg.MAX_DEPLOY_BUNDLE_SIZE),
+		)
+		return
+	}
+
+	utils.ResponseWithSuccess[any](
+		w,
+		http.StatusCreated,
+		nil,
+		"Deployment created successfully",
+	)
+} 

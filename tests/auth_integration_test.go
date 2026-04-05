@@ -23,6 +23,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 		org_service := &StubOrgService{}
 		project_service := &StubProjectService{}
 		application_service := &StubApplicationService{}
+		deployment_service := &StubDeploymentService{}
 		jwt_validator := &StubJwtValidator{}
 
 		user_body := `
@@ -37,10 +38,11 @@ func TestAuthSignupIntegration(t *testing.T) {
 
 		request, _ := http.NewRequest(http.MethodPost, "/api/auth/signup", body)
 		response := httptest.NewRecorder()
-		
+
 		api_server := api.NewAPIServer(
-			test_ctx, 
+			test_ctx,
 			application_service,
+			deployment_service,
 			user_service,
 			auth_service,
 			org_service,
@@ -71,11 +73,13 @@ func TestAuthSignupIntegration(t *testing.T) {
 		org_service := &StubOrgService{}
 		project_service := &StubProjectService{}
 		application_service := &StubApplicationService{}
+		deployment_service := &StubDeploymentService{}
 		jwt_validator := &StubJwtValidator{}
 
 		api_server := api.NewAPIServer(
-			test_ctx, 
+			test_ctx,
 			application_service,
+			deployment_service,
 			user_service,
 			auth_service,
 			org_service,
@@ -119,11 +123,13 @@ func TestAuthSignupIntegration(t *testing.T) {
 		org_service := &StubOrgService{}
 		project_service := &StubProjectService{}
 		application_service := &StubApplicationService{}
+		deployment_service := &StubDeploymentService{}
 		jwt_validator := &StubJwtValidator{}
 
 		api_server := api.NewAPIServer(
-			test_ctx, 
+			test_ctx,
 			application_service,
+			deployment_service,
 			user_service,
 			auth_service,
 			org_service,

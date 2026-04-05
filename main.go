@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
 	"github.com/salmanrf/capybara-cloud/api"
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/auth"
@@ -17,6 +16,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
 	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
+	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
 func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
@@ -30,32 +30,27 @@ func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
 	return dbpool
 }
 
-func setup() (context.Context, *pgxpool.Pool, error) {
-	ctx := context.Background()
-
-	err := godotenv.Load()
+func setup() (context.Context, utils.Config, *pgxpool.Pool, error) {
+	cfg, err := utils.LoadConfig("./")
 	if err != nil {
-		fmt.Println("Unable to load env vars")
-		os.Exit(1)
+		return nil, cfg, nil, err
 	}
 
-	postgres_uri := os.Getenv("POSTGRES_URI")
-	dbpool := create_db_conn(ctx, postgres_uri)
+	ctx := context.Background()
+	dbpool := create_db_conn(ctx, cfg.POSTGRES_URI)
 
 	err = dbpool.Ping(ctx)
-
 	if err != nil {
-		fmt.Println("Unable to ping database")
-		os.Exit(1)
+		return nil, cfg, nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
 	fmt.Println("Database connection established")
 
-	return ctx, dbpool, nil
+	return ctx, cfg, dbpool, nil
 }
 
 func main() {
-	ctx, db_conn, err := setup()
+	ctx, cfg, db_conn, err := setup()
 	defer db_conn.Close()
 	defer func() {
 		fmt.Println("Server is stopped")
@@ -66,25 +61,27 @@ func main() {
 
 	queries := database.New(db_conn)
 	application_repository := application.NewRepository(ctx, queries)
+	deployment_repository := application.NewDeploymentRepository(ctx, queries)
 	user_service := user.NewService(ctx, queries)
 	auth_service := auth.NewService(ctx, user_service)
 	org_service := organization.NewService(ctx, db_conn, queries, user_service)
 	project_service := project.NewService(ctx, db_conn, queries, user_service)
 	application_service := application.NewService(ctx, db_conn, application_repository, project_service)
-	jwt_utils := auth_utils.NewJWTUtils(os.Getenv("AUTH_JWT_SECRET"))
-	
+	deployment_service := application.NewDeploymentService(application_service, deployment_repository)
+	jwt_utils := auth_utils.NewJWTUtils(cfg.AUTH_JWT_SECRET)
+
 	api_server := api.NewAPIServer(
-		ctx, 
+		ctx,
 		application_service,
-		user_service, 
-		auth_service, 
+		deployment_service,
+		user_service,
+		auth_service,
 		org_service,
 		project_service,
 		jwt_utils,
 	)
-	
-	api_port := os.Getenv("API_PORT")
-	address := fmt.Sprintf(":%s", api_port)
+
+	address := fmt.Sprintf(":%s", cfg.API_PORT)
 	fmt.Printf("Starting API server on %s\n", address)
 	http.ListenAndServe(address, api_server)
 }

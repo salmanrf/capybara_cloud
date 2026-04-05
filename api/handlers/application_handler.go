@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"mime"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
@@ -19,6 +22,7 @@ type AppHandlers interface {
 	HandleUpdate(w http.ResponseWriter, r *http.Request)
 	HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 	HandleFindOneConfig(w http.ResponseWriter, r *http.Request)
+	HandleCreateOneDeployment(w http.ResponseWriter, r *http.Request) 
 }
 
 func NewAppHandlers(app_service application.Service) AppHandlers {
@@ -325,5 +329,70 @@ func (h *app_handler) HandleFindOneConfig(w http.ResponseWriter, r *http.Request
 		http.StatusOK,
 		config,
 		"Application config retrieved successfully",
+	)
+}
+
+func (h *app_handler) HandleCreateOneDeployment(w http.ResponseWriter, r *http.Request) {
+	content_type := r.Header.Get("content-type")
+	content_type = strings.Split(content_type, ";")[0]
+	if strings.Compare(strings.ToLower(content_type), "multipart/form-data") != 0{
+		utils.ResponseWithError(
+			w,
+			http.StatusUnprocessableEntity,
+			nil,
+			"invalid content type",
+		)
+		return
+	} 
+
+	err := r.ParseMultipartForm(100 * 1024 * 1024)
+	if err != nil {
+		errmsg := err.Error()
+		utils.ResponseWithError(
+			w,
+			http.StatusUnprocessableEntity,
+			nil,
+			errmsg,
+		)
+		return
+	}
+
+	bundle_file, headers, err := r.FormFile("bundle")
+	if bundle_file == nil || headers == nil {
+		utils.ResponseWithError(
+			w,
+			http.StatusUnprocessableEntity,
+			nil,
+			"deployment 'bundle' file must be provided as .tar.gz (application/gzip) file",
+		)
+		return
+	}
+	bundle_ext := filepath.Ext(headers.Filename)
+	mimetype := mime.TypeByExtension(bundle_ext)
+	filesize_bytes := headers.Size
+	if strings.Compare(strings.ToLower(mimetype), "application/gzip") != 0 {
+		utils.ResponseWithError(
+			w,
+			http.StatusRequestEntityTooLarge,
+			nil,
+			"deployment 'bundle' file must be provided as .tar.gz (application/gzip) file",
+		)
+		return
+	}
+	if filesize_bytes > 100 * 1024 * 1024 {
+		utils.ResponseWithError(
+			w,
+			http.StatusRequestEntityTooLarge,
+			nil,
+			"deployment 'bundle' file is too large (max: 100MB)",
+		)
+		return
+	}
+
+	utils.ResponseWithSuccess[any](
+		w,
+		http.StatusOK,
+		nil,
+		"success",
 	)
 }

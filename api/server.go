@@ -21,6 +21,7 @@ type api_server struct {
 func NewAPIServer(
 	ctx context.Context,
 	application_service application.Service,
+	deployment_service application.DeploymentService,
 	user_service user.Service,
 	auth_service auth.Service,
 	org_service organization.Service,
@@ -32,6 +33,7 @@ func NewAPIServer(
 	router.Route("/api", func (r chi.Router) {
 		r.Mount("/applications", routes.SetupApplicationRouter(
 			application_service,
+			deployment_service,
 			jwt_validator,
 		))
 		r.Mount("/organizations", routes.SetupOrganizationRouter(
