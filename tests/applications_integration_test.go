@@ -20,10 +20,11 @@ import (
 
 func TestCreateApplication(t *testing.T) {
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
-	
+
 	mux := chi.NewRouter()
-	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, jwt_validator))
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, deployment_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler
@@ -340,10 +341,11 @@ func TestCreateApplication(t *testing.T) {
 
 func TestUpdateApplication(t *testing.T) {
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
-	
+
 	mux := chi.NewRouter()
-	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, jwt_validator))
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, deployment_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler
@@ -595,10 +597,11 @@ func TestUpdateApplication(t *testing.T) {
 
 func TestFindOneApplication(t *testing.T) {
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
-	
+
 	mux := chi.NewRouter()
-	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, jwt_validator))
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, deployment_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler

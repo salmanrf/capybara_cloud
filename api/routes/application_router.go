@@ -10,10 +10,11 @@ import (
 	"github.com/salmanrf/capybara-cloud/pkg/auth"
 )
 
-func SetupApplicationRouter(application_service application.Service, jwt_validator auth.JWT) chi.Router {
+func SetupApplicationRouter(application_service application.Service, deployment_service application.DeploymentService, jwt_validator auth.JWT) chi.Router {
 	r := chi.NewRouter()
 	
 	app_handlers := handlers.NewAppHandlers(application_service)
+	deployment_handlers := handlers.NewAppDeploymentHandlers(deployment_service)
 
 	r.Post("/", middleware.LoginGuard(
 		jwt_validator, 
@@ -39,6 +40,13 @@ func SetupApplicationRouter(application_service application.Service, jwt_validat
 		jwt_validator,
 		http.HandlerFunc(app_handlers.HandleCreateConfig),
 	))
+
+	r.Post("/{app_id}/deployments", 
+		middleware.LoginGuard(
+			jwt_validator,
+			http.HandlerFunc(deployment_handlers.HandleCreateOneDeployment),
+		),
+	)
 
 	return r
 }

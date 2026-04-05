@@ -25,6 +25,7 @@ func TestOrganizationCreateIntegration(t *testing.T) {
 	org_service := &StubOrgService{}
 	project_service := &StubProjectService{}
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
 
 	mock_user := &database.User{
@@ -41,6 +42,7 @@ func TestOrganizationCreateIntegration(t *testing.T) {
 	server := api.NewAPIServer(
 		test_ctx,
 		application_service,
+		deployment_service,
 		user_service,
 		auth_service,
 		org_service,
@@ -188,6 +190,7 @@ func TestOrganizationGetOne(t *testing.T) {
 	org_service := &StubOrgService{}
 	project_service := &StubProjectService{}
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
 
 	mock_user := &database.User{
@@ -204,6 +207,7 @@ func TestOrganizationGetOne(t *testing.T) {
 	server := api.NewAPIServer(
 		test_ctx,
 		application_service,
+		deployment_service,
 		user_service,
 		auth_service,
 		org_service,
@@ -290,6 +294,7 @@ func TestOrganizationUpdateOne(t *testing.T) {
 	org_service := &StubOrgService{}
 	project_service := &StubProjectService{}
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
 
 	mock_user := &database.User{
@@ -306,6 +311,7 @@ func TestOrganizationUpdateOne(t *testing.T) {
 	server := api.NewAPIServer(
 		test_ctx,
 		application_service,
+		deployment_service,
 		user_service,
 		auth_service,
 		org_service,
@@ -459,6 +465,7 @@ func TestOrganizationDeleteOne(t *testing.T) {
 	org_service := &StubOrgService{}
 	project_service := &StubProjectService{}
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
 
 	mock_user := &database.User{
@@ -475,6 +482,7 @@ func TestOrganizationDeleteOne(t *testing.T) {
 	server := api.NewAPIServer(
 		test_ctx,
 		application_service,
+		deployment_service,
 		user_service,
 		auth_service,
 		org_service,

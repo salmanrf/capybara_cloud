@@ -1,12 +1,17 @@
 package tests
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
 )
+
+type api_server struct {
+		http.Handler
+}
 
 type StubUserService struct {
 	find_by_id_n_calls int
@@ -222,6 +227,33 @@ func (s *StubApplicationService) FindOneConfig(app_id string, user_id string) (*
 	s.find_one_config_calls_arg1 = append(s.find_one_config_calls_arg1, app_id)
 	s.find_one_config_calls_arg2 = append(s.find_one_config_calls_arg2, user_id)
 	return s.find_one_config_return, s.find_one_config_error
+}
+
+type StubDeploymentService struct {
+	deploy_n_calls int
+	deploy_return *database.Application
+	deploy_err error
+	deploy_config_calls_arg1 []string
+	deploy_config_calls_arg2 []string
+	deploy_config_calls_arg3 []dto.CreateApplicationConfigDto
+	deploy_config_n_calls int
+	deploy_config_return *database.ApplicationConfig
+	deploy_config_err error
+	deploy_calls_arg1 []string
+}
+
+func (s *StubDeploymentService) Clear() {
+	s.deploy_n_calls = 0
+	s.deploy_return = nil
+	s.deploy_err = nil
+	s.deploy_calls_arg1 = []string{}
+	s.deploy_config_n_calls = 0
+}
+
+func (s *StubDeploymentService) Deploy() (*database.Application, error) {
+	// s.deploy_n_calls += 1
+	// s.deploy_calls_arg1 = append(s.deploy_calls_arg1, user_id)
+	return s.deploy_return, s.deploy_err
 }
 
 type StubJwtValidator struct {

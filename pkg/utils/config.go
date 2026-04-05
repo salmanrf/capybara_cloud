@@ -19,8 +19,8 @@ type Config struct {
 
 var app_cfg = Config{}
 
-func LoadConfig() (Config, error) {
-	if err := godotenv.Load(); err != nil {
+func LoadConfig(env_path string) (Config, error) {
+	if err := godotenv.Load(env_path); err != nil {
 		return Config{}, fmt.Errorf("unable to load env vars: %w", err)
 	}
 
@@ -74,8 +74,10 @@ func GetConfig() Config {
 
 func SetConfig(newconf Config) {
 	app_cfg = Config{
-		POSTGRES_URI:    newconf.POSTGRES_URI,
-		API_PORT:        newconf.API_PORT,
-		AUTH_JWT_SECRET: newconf.AUTH_JWT_SECRET,
+		POSTGRES_URI:    			  newconf.POSTGRES_URI,
+		API_PORT:        				newconf.API_PORT,
+		AUTH_JWT_SECRET: 				newconf.AUTH_JWT_SECRET,
+		MAX_DEPLOY_FORM_SIZE: 	newconf.MAX_DEPLOY_FORM_SIZE,
+		MAX_DEPLOY_BUNDLE_SIZE: newconf.MAX_DEPLOY_BUNDLE_SIZE,
 	}
 }

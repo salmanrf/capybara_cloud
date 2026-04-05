@@ -23,10 +23,11 @@ import (
 
 func TestCreateApplicationConfig(t *testing.T) {
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
-	
+
 	mux := chi.NewRouter()
-	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, jwt_validator)) 
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, deployment_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler
@@ -151,7 +152,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 				got_status := res.Result().StatusCode
 				want_status := []int{http.StatusBadRequest, http.StatusUnprocessableEntity}
 				if slices.Index(want_status, got_status) == -1 {
-					t.Errorf("got status code %d, want %d\n", got_status, want_status)
+					t.Errorf("got status code %d, want %v\n", got_status, want_status)
 				}
 			})
 		}
@@ -473,10 +474,11 @@ func TestCreateApplicationConfig(t *testing.T) {
 
 func TestFindOneApplicationConfig(t *testing.T) {
 	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
-	
+
 	mux := chi.NewRouter()
-	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, jwt_validator)) 
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, deployment_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler
