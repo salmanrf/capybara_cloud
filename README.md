@@ -1,11 +1,11 @@
 # Capybara Cloud
 
-Capybara Cloud is an open source, self-hosted, "Bring your own cloud", AI-assistend
-Platform as a Service (PaaS) engine.
+Capybara Cloud is an open source, self-hosted, "Bring your own cloud", AI-assisted Platform as a Service (PaaS) engine.
 
 # Documentations
 
-- **System Design Whiteboard (Excalidraw File)** `/docs/system-design-docs.excalidraw`
+- **[System Design Doc](https://excalidraw.com/#json=3yPz0qTveR2ej6J0Nx8u9,NTsf1Y6HhyxlPl0KiIFC2w)**
+  The same document is available at `docs/system-design-docs.excalidraw`.
 
 # Project Structure
 
@@ -49,3 +49,21 @@ MAX_DEPLOY_FORM_SIZE=
 # Max deployment bundle size in bytes
 MAX_DEPLOY_BUNDLE_SIZE=
 ```
+
+# Development Status
+
+## Space Module — Complete
+
+- Organization, project, and application CRUD
+- Session-based authentication
+- Full integration test coverage (TDD)
+
+## Deployment Module — In Progress
+
+- Single-host application deployment via multipart form upload.
+- Custom multipart/form-data mocker for testing..
+
+## Provisioning Module — Planned
+
+- Event based host registration.
+- TCP connection pinger.
