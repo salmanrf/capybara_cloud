@@ -42,3 +42,14 @@ VALUES ($1, $2)
 ON CONFLICT (app_id)
 DO UPDATE SET variables_json = $2, updated_at = NOW()
 RETURNING *;
+
+-- name: CreateApplicationDeployment :one
+INSERT INTO "application_deployments" (
+  app_id,
+  artifacts_path,
+  process_name,
+  container_name,
+  variables_snapshot_json
+)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;

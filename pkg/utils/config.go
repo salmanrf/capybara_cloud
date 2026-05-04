@@ -15,6 +15,7 @@ type Config struct {
 	AUTH_JWT_SECRET string
 	MAX_DEPLOY_FORM_SIZE int
 	MAX_DEPLOY_BUNDLE_SIZE int
+	DOCKER_REGISTRY string
 }
 
 var app_cfg = Config{}
@@ -36,6 +37,7 @@ func LoadConfig(env_path string) (Config, error) {
 		POSTGRES_URI:    os.Getenv("POSTGRES_URI"),
 		API_PORT:        os.Getenv("API_PORT"),
 		AUTH_JWT_SECRET: os.Getenv("AUTH_JWT_SECRET"),
+		DOCKER_REGISTRY: os.Getenv("DOCKER_REGISTRY"),
 		MAX_DEPLOY_FORM_SIZE: max_form_size,
 		MAX_DEPLOY_BUNDLE_SIZE: max_bundle_size,
 	}
@@ -60,6 +62,9 @@ func (c *Config) Validate() error {
 	}
 	if c.AUTH_JWT_SECRET == "" {
 		errs = append(errs, errors.New("AUTH_JWT_SECRET is required"))
+	}
+	if c.DOCKER_REGISTRY == "" {
+		errs = append(errs, errors.New("DOCKER_REGISTRY is required"))
 	}
 
 	if len(errs) > 0 {

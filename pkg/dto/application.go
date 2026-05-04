@@ -9,7 +9,7 @@ import (
 
 func GetSupportedAppTypes() []string {
 	return []string{
-		"web_app_container",
+		"container_nodejs",
 	}
 }
 

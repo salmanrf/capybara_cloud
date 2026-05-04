@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
@@ -25,20 +24,17 @@ type Service interface {
 
 type service struct {
 	ctx context.Context
-	conn *pgxpool.Pool
 	repository ApplicationRepository
 	project_service project.Service
 }
 
 func NewService(
 	ctx context.Context, 
-	conn *pgxpool.Pool, 
 	repository ApplicationRepository,
 	project_service project.Service,
 ) Service {
 	return &service{
 		ctx,
-		conn,
 		repository,
 		project_service,
 	}

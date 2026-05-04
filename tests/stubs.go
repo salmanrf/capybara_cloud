@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"mime/multipart"
 	"net/http"
 	"time"
 
@@ -136,110 +137,107 @@ func (s *StubProjectService) ListMyProjects(user_id string) ([]database.FindProj
 }
 
 type StubApplicationService struct {
-	create_n_calls int
-	create_return *database.Application
-	create_err error
-	create_config_calls_arg1 []string
-	create_config_calls_arg2 []string
-	create_config_calls_arg3 []dto.CreateApplicationConfigDto
-	create_config_n_calls int
-	create_config_return *database.ApplicationConfig
-	create_config_err error
-	create_calls_arg1 []string
-	update_n_calls int
-	update_return *database.Application
-	update_err error
-	update_calls_arg1 []string
-	update_calls_arg2 []string
-	update_calls_arg3 []dto.UpdateApplicationDto
-	find_one_n_calls int
-	find_one_return *database.FindOneApplicationWithProjectMemberRow
-	find_one_error error
-	find_one_calls_arg1 []string
-	find_one_calls_arg2 []string
-	find_one_config_calls_arg1 []string
-	find_one_config_calls_arg2 []string
-	find_one_config_n_calls int
-	find_one_config_return *dto.ApplicationConfigResponse
-	find_one_config_error error
+	Create_n_calls int
+	Create_return *database.Application
+	Create_err error
+	Create_config_calls_arg1 []string
+	Create_config_calls_arg2 []string
+	Create_config_calls_arg3 []dto.CreateApplicationConfigDto
+	Create_config_n_calls int
+	Create_config_return *database.ApplicationConfig
+	Create_config_err error
+	Create_calls_arg1 []string
+	Update_n_calls int
+	Update_return *database.Application
+	Update_err error
+	Update_calls_arg1 []string
+	Update_calls_arg2 []string
+	Update_calls_arg3 []dto.UpdateApplicationDto
+	Find_one_n_calls int
+	Find_one_return *database.FindOneApplicationWithProjectMemberRow
+	Find_one_error error
+	Find_one_calls_arg1 []string
+	Find_one_calls_arg2 []string
+	Find_one_config_calls_arg1 []string
+	Find_one_config_calls_arg2 []string
+	Find_one_config_n_calls int
+	Find_one_config_return *dto.ApplicationConfigResponse
+	Find_one_config_error error
 }
 
 func (s *StubApplicationService) Clear() {
-	s.create_n_calls = 0
-	s.create_return = nil
-	s.create_err = nil
-	s.update_n_calls = 0
-	s.update_return = nil
-	s.update_err = nil
-	s.create_calls_arg1 = []string{}
-	s.update_calls_arg1 = []string{}
-	s.update_calls_arg2 = []string{}
-	s.update_calls_arg3 = []dto.UpdateApplicationDto{}
-	s.find_one_return = nil
-	s.find_one_error = nil
-	s.find_one_n_calls = 0
-	s.find_one_calls_arg1 = []string{}
-	s.find_one_calls_arg2 = []string{}
-	s.create_config_n_calls = 0
-	s.create_config_calls_arg1 = []string{}
-	s.create_config_calls_arg2 = []string{}
-	s.create_config_calls_arg3 = []dto.CreateApplicationConfigDto{}
-	s.create_config_return = nil
-	s.create_config_err = nil
-	s.find_one_config_n_calls = 0
-	s.find_one_config_calls_arg1 = []string{}
-	s.find_one_config_calls_arg2 = []string{}
-	s.find_one_config_return = nil
-	s.find_one_config_error = nil
+	s.Create_n_calls = 0
+	s.Create_return = nil
+	s.Create_err = nil
+	s.Update_n_calls = 0
+	s.Update_return = nil
+	s.Update_err = nil
+	s.Create_calls_arg1 = []string{}
+	s.Update_calls_arg1 = []string{}
+	s.Update_calls_arg2 = []string{}
+	s.Update_calls_arg3 = []dto.UpdateApplicationDto{}
+	s.Find_one_return = nil
+	s.Find_one_error = nil
+	s.Find_one_n_calls = 0
+	s.Find_one_calls_arg1 = []string{}
+	s.Find_one_calls_arg2 = []string{}
+	s.Create_config_n_calls = 0
+	s.Create_config_calls_arg1 = []string{}
+	s.Create_config_calls_arg2 = []string{}
+	s.Create_config_calls_arg3 = []dto.CreateApplicationConfigDto{}
+	s.Create_config_return = nil
+	s.Create_config_err = nil
+	s.Find_one_config_n_calls = 0
+	s.Find_one_config_calls_arg1 = []string{}
+	s.Find_one_config_calls_arg2 = []string{}
+	s.Find_one_config_return = nil
+	s.Find_one_config_error = nil
 }
 
 func (s *StubApplicationService) Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error) {
-	s.create_n_calls += 1
-	s.create_calls_arg1 = append(s.create_calls_arg1, user_id)
-	return s.create_return, s.create_err
+	s.Create_n_calls += 1
+	s.Create_calls_arg1 = append(s.Create_calls_arg1, user_id)
+	return s.Create_return, s.Create_err
 }
 
 func (s *StubApplicationService) Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error) {
-	s.update_n_calls += 1
-	s.update_calls_arg1 = append(s.update_calls_arg1, app_id)
-	s.update_calls_arg2 = append(s.update_calls_arg2, user_id)
-	s.update_calls_arg3 = append(s.update_calls_arg3, dto)
-	return s.update_return, s.update_err
+	s.Update_n_calls += 1
+	s.Update_calls_arg1 = append(s.Update_calls_arg1, app_id)
+	s.Update_calls_arg2 = append(s.Update_calls_arg2, user_id)
+	s.Update_calls_arg3 = append(s.Update_calls_arg3, dto)
+	return s.Update_return, s.Update_err
 }
 
 func (s *StubApplicationService) FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error) {
-	s.find_one_n_calls += 1
-	s.find_one_calls_arg1 = append(s.find_one_calls_arg1, app_id)
-	s.find_one_calls_arg2 = append(s.find_one_calls_arg2, user_id)
-	return s.find_one_return, s.find_one_error
+	s.Find_one_n_calls += 1
+	s.Find_one_calls_arg1 = append(s.Find_one_calls_arg1, app_id)
+	s.Find_one_calls_arg2 = append(s.Find_one_calls_arg2, user_id)
+	return s.Find_one_return, s.Find_one_error
 } 
 
 func (s *StubApplicationService) CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error) {
-	s.create_config_n_calls += 1
-	s.create_config_calls_arg1 = append(s.create_config_calls_arg1, app_id)
-	s.create_config_calls_arg2 = append(s.create_config_calls_arg2, user_id)
-	s.create_config_calls_arg3 = append(s.create_config_calls_arg3, dto)
-	return s.create_config_return, s.create_config_err
+	s.Create_config_n_calls += 1
+	s.Create_config_calls_arg1 = append(s.Create_config_calls_arg1, app_id)
+	s.Create_config_calls_arg2 = append(s.Create_config_calls_arg2, user_id)
+	s.Create_config_calls_arg3 = append(s.Create_config_calls_arg3, dto)
+	return s.Create_config_return, s.Create_config_err
 }
 
 func (s *StubApplicationService) FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error) {
-	s.find_one_config_n_calls += 1
-	s.find_one_config_calls_arg1 = append(s.find_one_config_calls_arg1, app_id)
-	s.find_one_config_calls_arg2 = append(s.find_one_config_calls_arg2, user_id)
-	return s.find_one_config_return, s.find_one_config_error
+	s.Find_one_config_n_calls += 1
+	s.Find_one_config_calls_arg1 = append(s.Find_one_config_calls_arg1, app_id)
+	s.Find_one_config_calls_arg2 = append(s.Find_one_config_calls_arg2, user_id)
+	return s.Find_one_config_return, s.Find_one_config_error
 }
 
 type StubDeploymentService struct {
 	deploy_n_calls int
-	deploy_return *database.Application
+	deploy_return *database.ApplicationDeployment
 	deploy_err error
-	deploy_config_calls_arg1 []string
-	deploy_config_calls_arg2 []string
-	deploy_config_calls_arg3 []dto.CreateApplicationConfigDto
-	deploy_config_n_calls int
-	deploy_config_return *database.ApplicationConfig
-	deploy_config_err error
 	deploy_calls_arg1 []string
+	deploy_calls_arg2 []string
+	deploy_calls_arg3 []*multipart.FileHeader
+	deploy_calls_arg4 []multipart.File
 }
 
 func (s *StubDeploymentService) Clear() {
@@ -247,12 +245,17 @@ func (s *StubDeploymentService) Clear() {
 	s.deploy_return = nil
 	s.deploy_err = nil
 	s.deploy_calls_arg1 = []string{}
-	s.deploy_config_n_calls = 0
+	s.deploy_calls_arg2 = []string{}
+	s.deploy_calls_arg3 = []*multipart.FileHeader{}
+	s.deploy_calls_arg4 = []multipart.File{}
 }
 
-func (s *StubDeploymentService) Deploy() (*database.Application, error) {
-	// s.deploy_n_calls += 1
-	// s.deploy_calls_arg1 = append(s.deploy_calls_arg1, user_id)
+func (s *StubDeploymentService) Deploy(user_id string, application_id string, bundle_file_headers *multipart.FileHeader, bundle multipart.File) (*database.ApplicationDeployment, error) {
+	s.deploy_n_calls += 1
+	s.deploy_calls_arg1 = append(s.deploy_calls_arg1, user_id)
+	s.deploy_calls_arg2 = append(s.deploy_calls_arg2, application_id)
+	s.deploy_calls_arg3 = append(s.deploy_calls_arg3, bundle_file_headers)
+	s.deploy_calls_arg4 = append(s.deploy_calls_arg4, bundle)
 	return s.deploy_return, s.deploy_err
 }
 
