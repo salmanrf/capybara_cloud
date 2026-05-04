@@ -56,7 +56,7 @@ func TestCreateApplication(t *testing.T) {
 		expected_project_uuid.Scan("28451bd5-0113-4ec6-9540-6646ae72a957")
 		expected_app_name := "Sophia School"
 
-		application_service.create_return = &database.Application{
+		application_service.Create_return = &database.Application{
 			AppID: expected_app_uuid,
 			ProjectID: expected_project_uuid,
 			Name: expected_app_name,
@@ -152,14 +152,14 @@ func TestCreateApplication(t *testing.T) {
 
 		api.ServeHTTP(res, req)
 
-		got_service_called := application_service.create_n_calls
+		got_service_called := application_service.Create_n_calls
 		want_service_called := 1
 
 		if got_service_called != want_service_called {
 			t.Errorf("got application_service create method called %d times, want %d\n", got_service_called, want_service_called)
 		}
 
-		got_called_with_user_id := application_service.create_calls_arg1[0]
+		got_called_with_user_id := application_service.Create_calls_arg1[0]
 		want_called_with_user_id := expected_user_id
 
 		if got_called_with_user_id != want_called_with_user_id {
@@ -172,7 +172,7 @@ func TestCreateApplication(t *testing.T) {
 			application_service.Clear()
 		}()
 
-		application_service.create_err = errors.New("permission_denied")
+		application_service.Create_err = errors.New("permission_denied")
 		
 		expected_user_id := "123"
 		expected_type := dto.GetSupportedAppTypes()[0]
@@ -408,7 +408,7 @@ func TestUpdateApplication(t *testing.T) {
 		))
 
 		jwt_validator.validate_return = mock_user_id
-		application_service.update_return = &database.Application{
+		application_service.Update_return = &database.Application{
 			Name: expected_new_name,
 		}
 
@@ -464,7 +464,7 @@ func TestUpdateApplication(t *testing.T) {
 		))
 
 		jwt_validator.validate_return = mock_user_id
-		application_service.update_return = &database.Application{
+		application_service.Update_return = &database.Application{
 			Name: expected_new_name,
 		}
 
@@ -479,28 +479,28 @@ func TestUpdateApplication(t *testing.T) {
 
 		api.ServeHTTP(res, req)
 
-		got_update_called := application_service.update_n_calls
+		got_update_called := application_service.Update_n_calls
 		want_update_callled := 1
 
 		if got_update_called != want_update_callled {
 			t.Errorf("got service method update called %d times, want %d\n", got_update_called, want_update_callled)
 		}
 
-		got_called_with_app_id := application_service.update_calls_arg1[0]
+		got_called_with_app_id := application_service.Update_calls_arg1[0]
 		want_called_with_app_id := expected_app_id
 
 		if got_called_with_app_id != want_called_with_app_id {
 			t.Errorf("got service method update called with app id %s, want %s\n", got_called_with_app_id, want_called_with_app_id)
 		}
 
-		got_called_with_user_id := application_service.update_calls_arg2[0]
+		got_called_with_user_id := application_service.Update_calls_arg2[0]
 		want_called_with_user_id := mock_user_id
 
 		if got_called_with_user_id != want_called_with_user_id {
 			t.Errorf("got service method update called with user id %s, want %s\n", got_called_with_user_id, want_called_with_user_id)
 		}
 
-		got_called_with_dto := application_service.update_calls_arg3[0]
+		got_called_with_dto := application_service.Update_calls_arg3[0]
 		want_called_with_dto := dto.UpdateApplicationDto{
 			Name: expected_new_name,
 		}
@@ -573,7 +573,7 @@ func TestUpdateApplication(t *testing.T) {
 			),
 		))
 
-		application_service.update_err = errors.New("permission_denied")
+		application_service.Update_err = errors.New("permission_denied")
 		
 		req, _ := http.NewRequest(
 			http.MethodPut, 
@@ -652,8 +652,8 @@ func TestFindOneApplication(t *testing.T) {
 
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
 
-		application_service.find_one_return = nil
-		application_service.find_one_error = nil
+		application_service.Find_one_return = nil
+		application_service.Find_one_error = nil
 		
 		req, _ := http.NewRequest(
 			http.MethodGet, 
@@ -681,8 +681,8 @@ func TestFindOneApplication(t *testing.T) {
 
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
 
-		application_service.find_one_return = nil
-		application_service.find_one_error = errors.New("permission_denied")
+		application_service.Find_one_return = nil
+		application_service.Find_one_error = errors.New("permission_denied")
 		
 		req, _ := http.NewRequest(
 			http.MethodGet, 
@@ -722,7 +722,7 @@ func TestFindOneApplication(t *testing.T) {
 				expected_app_uuid := pgtype.UUID{}
 				expected_app_uuid.Scan(expected_app_id)
 
-				application_service.find_one_return = &database.FindOneApplicationWithProjectMemberRow{
+				application_service.Find_one_return = &database.FindOneApplicationWithProjectMemberRow{
 					AppID: expected_app_uuid,
 				}
 				
@@ -786,7 +786,7 @@ func TestFindOneApplication(t *testing.T) {
 				expected_app_uuid := pgtype.UUID{}
 				expected_app_uuid.Scan(expected_app_id)
 
-				application_service.find_one_return = &database.FindOneApplicationWithProjectMemberRow{
+				application_service.Find_one_return = &database.FindOneApplicationWithProjectMemberRow{
 					AppID: expected_app_uuid,
 				}
 				
@@ -801,21 +801,21 @@ func TestFindOneApplication(t *testing.T) {
 
 				api.ServeHTTP(res, req)
 
-				got_service_called_n_times := application_service.find_one_n_calls
+				got_service_called_n_times := application_service.Find_one_n_calls
 				want_service_called_n_times := 1
 
 				if got_service_called_n_times != want_service_called_n_times {
 					t.Errorf("got service method called %d times, want %d", got_service_called_n_times, want_service_called_n_times)
 				}
 				
-				got_service_called_with_app_id := application_service.find_one_calls_arg1[0]
+				got_service_called_with_app_id := application_service.Find_one_calls_arg1[0]
 				want_service_called_with_app_id := expected_app_id
 
 				if got_service_called_with_app_id != want_service_called_with_app_id {
 					t.Errorf("got service method called with app id %s, want %s", got_service_called_with_app_id, want_service_called_with_app_id)
 				}
 				
-				got_service_called_with_user_id := application_service.find_one_calls_arg2[0]
+				got_service_called_with_user_id := application_service.Find_one_calls_arg2[0]
 				want_service_called_with_user_id := expected_user_id
 				
 				if got_service_called_with_user_id != want_service_called_with_user_id {

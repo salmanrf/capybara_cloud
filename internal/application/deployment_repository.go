@@ -12,7 +12,7 @@ type deployment_repository struct {
 }
 
 type DeploymentRepository interface {
-
+	Create(database.CreateApplicationDeploymentParams) (*database.ApplicationDeployment, error)
 }
 
 func NewDeploymentRepository(ctx context.Context, queries *database.Queries) DeploymentRepository {
@@ -20,3 +20,8 @@ func NewDeploymentRepository(ctx context.Context, queries *database.Queries) Dep
 		ctx, queries,
 	}
 }
+
+func (r *deployment_repository) Create(params database.CreateApplicationDeploymentParams) (*database.ApplicationDeployment, error) {
+	row, err := r.queries.CreateApplicationDeployment(r.ctx, params)
+	return &row, err
+} 

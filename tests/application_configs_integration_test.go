@@ -165,7 +165,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 		
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
 		jwt_validator.validate_return = mock_user_id
-		application_service.create_config_err = errors.New("not_found")
+		application_service.Create_config_err = errors.New("not_found")
 
 		body_string := `
 			{
@@ -199,7 +199,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 		
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
 		jwt_validator.validate_return = mock_user_id
-		application_service.create_config_err = errors.New("permission_denied")
+		application_service.Create_config_err = errors.New("permission_denied")
 
 		body_string := `
 			{
@@ -233,7 +233,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 		
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
 		jwt_validator.validate_return = mock_user_id
-		application_service.create_config_err = errors.New("internal server error")
+		application_service.Create_config_err = errors.New("internal server error")
 
 		body_string := `
 			{
@@ -320,7 +320,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 					VariablesJson: []byte(tt.expected_variables_json),
 				}
 				
-				application_service.create_config_return = expected_app_config
+				application_service.Create_config_return = expected_app_config
 				
 				payload, _ := tt.body.(string)
 
@@ -412,7 +412,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 				}()
 
 				expected_app_config := &database.ApplicationConfig{}
-				application_service.create_config_return = expected_app_config
+				application_service.Create_config_return = expected_app_config
 				jwt_validator.validate_return = tt.user_id
 				
 				payload := tt.body
@@ -440,28 +440,28 @@ func TestCreateApplicationConfig(t *testing.T) {
 					t.Errorf("got status code %d, want %d\n", got_status, want_status)
 				}
 
-				got_service_called_n_times := application_service.create_config_n_calls
+				got_service_called_n_times := application_service.Create_config_n_calls
 				want_service_called_n_times := 1
 
 				if got_service_called_n_times != want_service_called_n_times {
 					t.Errorf("got service method called %d times, want %d", got_service_called_n_times, want_service_called_n_times)
 				}
 
-				got_service_called_with_app_id := application_service.create_config_calls_arg1[0]
+				got_service_called_with_app_id := application_service.Create_config_calls_arg1[0]
 				want_service_called_with_app_id := tt.app_id
 
 				if got_service_called_with_app_id != want_service_called_with_app_id {
 					t.Errorf("got service method called with app id %s, want %s", got_service_called_with_app_id, want_service_called_with_app_id)
 				}
 
-				got_service_called_with_user_id := application_service.create_config_calls_arg2[0]
+				got_service_called_with_user_id := application_service.Create_config_calls_arg2[0]
 				want_service_called_with_user_id := tt.user_id
 
 				if got_service_called_with_user_id != want_service_called_with_user_id {
 					t.Errorf("got service method called with user id %s, want %s", got_service_called_with_user_id, want_service_called_with_user_id)
 				}
 
-				got_service_called_with_dto := application_service.create_config_calls_arg3[0]
+				got_service_called_with_dto := application_service.Create_config_calls_arg3[0]
 				want_service_called_with_dto := expected_dto
 
 				if !reflect.DeepEqual(got_service_called_with_dto, want_service_called_with_dto) {
@@ -531,7 +531,7 @@ func TestFindOneApplicationConfig(t *testing.T) {
 
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
 		jwt_validator.validate_return = mock_user_id
-		application_service.find_one_config_error = errors.New("not_found")
+		application_service.Find_one_config_error = errors.New("not_found")
 
 		req, _ := http.NewRequest(
 			http.MethodGet,
@@ -557,7 +557,7 @@ func TestFindOneApplicationConfig(t *testing.T) {
 
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
 		jwt_validator.validate_return = mock_user_id
-		application_service.find_one_config_error = errors.New("permission_denied")
+		application_service.Find_one_config_error = errors.New("permission_denied")
 
 		req, _ := http.NewRequest(
 			http.MethodGet,
@@ -583,7 +583,7 @@ func TestFindOneApplicationConfig(t *testing.T) {
 
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
 		jwt_validator.validate_return = mock_user_id
-		application_service.find_one_config_error = errors.New("internal server error")
+		application_service.Find_one_config_error = errors.New("internal server error")
 
 		req, _ := http.NewRequest(
 			http.MethodGet,
@@ -662,7 +662,7 @@ func TestFindOneApplicationConfig(t *testing.T) {
 					VariablesJson: []byte(tt.expected_variables_json),
 				}
 				
-				application_service.create_config_return = expected_app_config
+				application_service.Create_config_return = expected_app_config
 				
 				payload, _ := tt.body.(string)
 

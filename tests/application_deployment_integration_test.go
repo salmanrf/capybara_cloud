@@ -43,6 +43,10 @@ func TestCreateApplicationDeployment(t *testing.T) {
 	}
 
 	t.Run("should return status 401 if not logged in", func (t *testing.T) {
+		defer func () {
+			deployment_service.Clear()
+		}()
+		
 		expected_app_id := "b87fcac7-05bc-4342-ad43-96c6e3c8afa3"
 		req, _ := http.NewRequest(
 			"POST", 
@@ -62,7 +66,10 @@ func TestCreateApplicationDeployment(t *testing.T) {
 	})
 
 	t.Run("should return status 400/422 when validation failed", func (t *testing.T) {
-		utils.LoadConfig("./.env.test")
+		conf, _ := utils.LoadConfig("./.env.test")
+		conf.MAX_DEPLOY_BUNDLE_SIZE = 100
+		conf.MAX_DEPLOY_FORM_SIZE = 100
+		utils.SetConfig(conf)
 		
 		expected_app_id := "b87fcac7-05bc-4342-ad43-96c6e3c8afa3"
 
@@ -98,6 +105,10 @@ func TestCreateApplicationDeployment(t *testing.T) {
 		
 		for _, tt := range tests {
 			t.Run(fmt.Sprintf("returns 400 on %s", tt.desc), func (t *testing.T) {
+				defer func () {
+					deployment_service.Clear()
+				}()
+				
 				formdata := utils.NewMultipartForm()
 				for k, v := range tt.datamap {
 					formdata.SetField(k, v)
@@ -160,6 +171,10 @@ func TestCreateApplicationDeployment(t *testing.T) {
 		
 		for _, tt := range tests {
 			t.Run("returns 413 on data too large", func (t *testing.T) {
+				defer func () {
+					deployment_service.Clear()
+				}()
+				
 				cfg, _ := utils.LoadConfig("./.env.test")
 				cfg.MAX_DEPLOY_FORM_SIZE = tt.max_form_size
 				cfg.MAX_DEPLOY_BUNDLE_SIZE = tt.max_bundle_size
@@ -191,6 +206,15 @@ func TestCreateApplicationDeployment(t *testing.T) {
 	})
 
 	t.Run("should return status 200 on successful deployment", func (t *testing.T) {
+		conf, _ := utils.LoadConfig("./.env.test")
+		conf.MAX_DEPLOY_BUNDLE_SIZE = 500
+		conf.MAX_DEPLOY_FORM_SIZE = 500
+		utils.SetConfig(conf)
+		
+		defer func () {
+			deployment_service.Clear()
+		}()
+		
 		utils.LoadConfig("./.env.test")
 		expected_app_id := "b87fcac7-05bc-4342-ad43-96c6e3c8afa3"
 		formdata := utils.NewMultipartForm()
@@ -212,8 +236,21 @@ func TestCreateApplicationDeployment(t *testing.T) {
 		got_status := res.Result().StatusCode
 		want_status := http.StatusCreated
 
+		got_deploy_called_n := deployment_service.deploy_n_calls
+		want_deploy_called_n := 1
+		got_deploy_err := deployment_service.deploy_err
+		var want_deploy_err error = nil
+
 		if got_status != want_status {
 			t.Errorf("got status code %d, want %d\n", got_status, want_status)
+		}
+
+		if got_deploy_called_n != want_deploy_called_n {
+			t.Errorf("got deploy called %d times, want %d\n", got_deploy_called_n, want_deploy_called_n)
+		}
+
+		if got_deploy_err != want_deploy_err {
+			t.Errorf("got deploy error %v, want %v\n", got_deploy_err, want_deploy_err)
 		}
 	})
 }

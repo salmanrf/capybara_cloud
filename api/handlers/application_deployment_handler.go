@@ -99,10 +99,25 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 		return
 	}
 
-	utils.ResponseWithSuccess[any](
+	app_id := r.PathValue("app_id")
+	user_id, _ := r.Context().Value("user_id").(string)
+
+	deployment, err := h.deployment_service.Deploy(user_id, app_id, file_headers, bundle_file)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		utils.ResponseWithSuccess[any](
+			w,
+			http.StatusInternalServerError,
+			nil,
+			"Internal server error",
+		)
+		return
+	}
+
+	utils.ResponseWithSuccess(
 		w,
 		http.StatusCreated,
-		nil,
+		deployment,
 		"Deployment created successfully",
 	)
 } 

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/salmanrf/capybara-cloud/api"
@@ -31,7 +32,10 @@ func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
 }
 
 func setup() (context.Context, utils.Config, *pgxpool.Pool, error) {
-	cfg, err := utils.LoadConfig("./")
+	pwd, _ := os.Getwd()
+	envpath := filepath.Join(pwd, ".env")
+
+	cfg, err := utils.LoadConfig(envpath)
 	if err != nil {
 		return nil, cfg, nil, err
 	}
@@ -66,8 +70,8 @@ func main() {
 	auth_service := auth.NewService(ctx, user_service)
 	org_service := organization.NewService(ctx, db_conn, queries, user_service)
 	project_service := project.NewService(ctx, db_conn, queries, user_service)
-	application_service := application.NewService(ctx, db_conn, application_repository, project_service)
-	deployment_service := application.NewDeploymentService(application_service, deployment_repository)
+	application_service := application.NewService(ctx, application_repository, project_service)
+	deployment_service := application.NewDeploymentService(ctx, application_service, deployment_repository)
 	jwt_utils := auth_utils.NewJWTUtils(cfg.AUTH_JWT_SECRET)
 
 	api_server := api.NewAPIServer(
