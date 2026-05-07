@@ -13,6 +13,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/auth"
 	"github.com/salmanrf/capybara-cloud/internal/database"
+	"github.com/salmanrf/capybara-cloud/internal/deployment"
 	"github.com/salmanrf/capybara-cloud/internal/organization"
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
@@ -65,13 +66,13 @@ func main() {
 
 	queries := database.New(db_conn)
 	application_repository := application.NewRepository(ctx, queries)
-	deployment_repository := application.NewDeploymentRepository(ctx, queries)
+	deployment_repository := deployment.NewDeploymentRepository(ctx, queries)
 	user_service := user.NewService(ctx, queries)
 	auth_service := auth.NewService(ctx, user_service)
 	org_service := organization.NewService(ctx, db_conn, queries, user_service)
 	project_service := project.NewService(ctx, db_conn, queries, user_service)
 	application_service := application.NewService(ctx, application_repository, project_service)
-	deployment_service := application.NewDeploymentService(ctx, application_service, deployment_repository)
+	deployment_service := deployment.NewService(ctx, application_service, deployment_repository)
 	jwt_utils := auth_utils.NewJWTUtils(cfg.AUTH_JWT_SECRET)
 
 	api_server := api.NewAPIServer(

@@ -8,6 +8,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/api/routes"
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/auth"
+	"github.com/salmanrf/capybara-cloud/internal/deployment"
 	"github.com/salmanrf/capybara-cloud/internal/organization"
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
@@ -21,7 +22,7 @@ type api_server struct {
 func NewAPIServer(
 	ctx context.Context,
 	application_service application.Service,
-	deployment_service application.DeploymentService,
+	deployment_service deployment.Service,
 	user_service user.Service,
 	auth_service auth.Service,
 	org_service organization.Service,
