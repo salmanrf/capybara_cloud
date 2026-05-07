@@ -6,19 +6,19 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/salmanrf/capybara-cloud/internal/application"
+	"github.com/salmanrf/capybara-cloud/internal/deployment"
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
 )
 
 type deployment_handler struct {
-	deployment_service application.DeploymentService
+	deployment_service deployment.Service
 }
 
 type AppDeploymentHandlers interface {
 	HandleCreateOneDeployment(w http.ResponseWriter, r *http.Request) 
 }
 
-func NewAppDeploymentHandlers(deployment_service application.DeploymentService) AppDeploymentHandlers {
+func NewAppDeploymentHandlers(deployment_service deployment.Service) AppDeploymentHandlers {
 	return &deployment_handler{
 		deployment_service,
 	}
