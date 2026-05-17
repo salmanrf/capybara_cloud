@@ -36,11 +36,15 @@ LIMIT 1;
 -- name: CreateApplicationConfig :one
 INSERT INTO "application_configs" (
   app_id,
+  port,
   variables_json
 )
-VALUES ($1, $2) 
+VALUES ($1, $2, $3) 
 ON CONFLICT (app_id)
-DO UPDATE SET variables_json = $2, updated_at = NOW()
+DO UPDATE SET 
+  port = $2,
+  variables_json = $3, 
+  updated_at = NOW()
 RETURNING *;
 
 -- name: CreateApplicationDeployment :one

@@ -157,6 +157,7 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 
 	params := database.CreateApplicationConfigParams{
 		AppID: app_uuid,
+		Port: int32(dto.Port),
 		VariablesJson: variables_json.Bytes(),
 	} 
 	app_cfg, err := s.repository.UpsertConfig(params)
@@ -202,6 +203,7 @@ func (s *service) FindOneConfig(app_id string, user_id string) (*dto.Application
 	response := &dto.ApplicationConfigResponse{
 		AppCfgID:        app_with_pm.ApplicationConfig.AppCfgID.String(),
 		AppID:           app_with_pm.ApplicationConfig.AppID.String(),
+		Port: int(app_with_pm.ApplicationConfig.Port),
 		VariablesJson:   string(app_with_pm.ApplicationConfig.VariablesJson),
 		ConfigVariables: configVariables,
 		CreatedAt:       app_with_pm.CreatedAt.Time,
