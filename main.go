@@ -56,13 +56,17 @@ func setup() (context.Context, utils.Config, *pgxpool.Pool, error) {
 
 func main() {
 	ctx, cfg, db_conn, err := setup()
-	defer db_conn.Close()
-	defer func() {
-		fmt.Println("Server is stopped")
-	}()
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db_conn.Close()
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("Server encountered a panic", err)
+		}
+
+		fmt.Println("Server is stopped")
+	}()
 
 	queries := database.New(db_conn)
 	application_repository := application.NewRepository(ctx, queries)
@@ -88,5 +92,7 @@ func main() {
 
 	address := fmt.Sprintf(":%s", cfg.API_PORT)
 	fmt.Printf("Starting API server on %s\n", address)
-	http.ListenAndServe(address, api_server)
+	if err := http.ListenAndServe(address, api_server); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }
