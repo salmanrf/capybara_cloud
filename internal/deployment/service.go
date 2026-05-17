@@ -58,12 +58,22 @@ func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *mul
 	artifact_path, err := saveDeployArtifacts(config, *app, bundle_file_headers, bundle_file)
 	container_name := fmt.Sprintf("%s:%s", deploy_datestr, utils.Slugify(app.Name)) 
 
+	next_version := int32(1)
+	current_dp, err := s.deployment_repository.FindCurrent(app_id)
+	if err != nil {
+		return nil, err
+	}
+	if current_dp != nil {
+		next_version = current_dp.VersionNumber + 1
+	}
+
 	create_dp_params := database.CreateApplicationDeploymentParams{
 		AppID: app.AppID,
 		ArtifactsPath: artifact_path,
 		ProcessName: "",
 		ContainerName: container_name,
 		VariablesSnapshotJson: app.ApplicationConfig.VariablesJson,
+		VersionNumber: int32(next_version),
 	}
 
 	app_deployment, err := s.deployment_repository.Create(create_dp_params)
@@ -100,7 +110,6 @@ func getArtifactDirPath(config utils.Config, storage_service string, app databas
 	return full_path
 }
 
-// TODO: Fix parallel tests failure due to contention in deleting /tmp/capybara-cloud
 func saveDeployArtifacts(
 	config utils.Config,
 	app database.FindOneApplicationWithProjectMemberRow, 
