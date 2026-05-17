@@ -274,6 +274,7 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 	app_config_response := dto.ApplicationConfigResponse{
 		AppCfgID: app_cfg.AppCfgID.String(),
 		AppID: app_cfg.AppID.String(),
+		Port: int(app_cfg.Port),
 		VariablesJson: string(app_cfg.VariablesJson),
 		ConfigVariables: body.Variables,
 		CreatedAt: app_cfg.CreatedAt.Time,

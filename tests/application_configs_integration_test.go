@@ -126,6 +126,16 @@ func TestCreateApplicationConfig(t *testing.T) {
 				}
 				`,
 			},
+			{
+				"invalid variables (missing port)",
+				`
+				{
+					"variables": {
+						"POSTGRES_URI": "postgres://abcd:abcd@zsh:3220"
+					}
+				}
+				`,
+			},
 		}
 
 		expected_app_id := "7aaa1bf8-437f-4f3c-8691-8316fc6fbe50"
@@ -169,6 +179,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 
 		body_string := `
 			{
+				"port": 2222,
 				"variables": {
 					"foo": "bar"
 				}
@@ -203,6 +214,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 
 		body_string := `
 			{
+				"port": 1111,
 				"variables": {
 					"foo": "bar"
 				}
@@ -237,6 +249,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 
 		body_string := `
 			{
+				"port": 7777, 
 				"variables": {
 					"foo": "bar"
 				}
@@ -271,6 +284,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 			desc string
 			app_id string
 			body any
+			expected_port int
 			expected_variables_json string
 			expected_config_variables map[string]any
 		}{
@@ -279,9 +293,11 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"817c42f9-a216-4475-a6e5-d98864bb5161",
 				fmt.Sprintf(`
 				{
+					"port": 8080,
 					"variables": %s
 				}
 				`, variables_1),
+				8080,
 				variables_1,
 				map[string]any{
 					"MONGO_URI": varv_1, 
@@ -292,9 +308,11 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"eb29b17d-04c3-4895-a170-930c36766df7",
 				fmt.Sprintf(`
 				{
+					"port": 5555,
 					"variables": %s
 				}
 				`, variables_2),
+				5555,
 				variables_2,
 				map[string]any{
 					"AUTH0_CLIENT_ID": varv_21,
@@ -318,6 +336,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 					AppID: app_uuid,
 					AppCfgID: app_cfg_uuid,
 					VariablesJson: []byte(tt.expected_variables_json),
+					Port: int32(tt.expected_port),
 				}
 				
 				application_service.Create_config_return = expected_app_config
@@ -349,7 +368,16 @@ func TestCreateApplicationConfig(t *testing.T) {
 					t.Errorf("got error parsing body %v, want nil", err)
 				}
 
+				got_call_arg := application_service.Create_config_calls_arg3[0]
+				got_called_port := got_call_arg.Port
+
 				got_data, _ := got_body.Data.(map[string]any)				
+
+				want_called_port := tt.expected_port
+				if got_called_port != want_called_port {
+					t.Errorf("got port %v, want %v", got_called_port, want_called_port)
+				}
+				
 				got_config_variables, ok := got_data["config_variables"].(map[string]any)
 				want_config_variables := tt.expected_config_variables
 				if !ok || !reflect.DeepEqual(got_config_variables, want_config_variables) {
@@ -371,6 +399,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 			app_id string
 			user_id string
 			body string
+			expected_port int
 			expected_map map[string]any
 		}{
 			{
@@ -378,11 +407,13 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"abcd",
 				`
 				{
+					"port": 1010,
 					"variables": {
 						"A": "B"
 					}
 				}
 				`,
+				1010,
 				map[string]any{
 					"A": "B",
 				},
@@ -392,11 +423,13 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"zxcv",
 				`
 				{
+					"port": 8888,
 					"variables": {
 						"C": "D"
 					}
 				}
 				`,
+				8888,
 				map[string]any{
 					"C": "D",
 				},
@@ -418,6 +451,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 				payload := tt.body
 
 				expected_dto := dto.CreateApplicationConfigDto{
+					Port: tt.expected_port,
 					Variables: tt.expected_map,
 				}
 
@@ -610,33 +644,19 @@ func TestFindOneApplicationConfig(t *testing.T) {
 		variables_2 := fmt.Sprintf(`{"AUTH0_CLIENT_ID": "%s", "AUTH0_CLIENT_SECRET": "%s"}`, varv_21, varv_22)
 		
 		tests := []struct{
-			desc string
 			app_id string
-			body any
 			expected_variables_json string
 			expected_config_variables map[string]any
 		}{
 			{
-				"valid payload",
 				"817c42f9-a216-4475-a6e5-d98864bb5161",
-				fmt.Sprintf(`
-				{
-					"variables": %s
-				}
-				`, variables_1),
 				variables_1,
 				map[string]any{
 					"MONGO_URI": varv_1, 
 				},
 			},
 			{
-				"valid payload",
 				"eb29b17d-04c3-4895-a170-930c36766df7",
-				fmt.Sprintf(`
-				{
-					"variables": %s
-				}
-				`, variables_2),
 				variables_2,
 				map[string]any{
 					"AUTH0_CLIENT_ID": varv_21,
@@ -648,29 +668,27 @@ func TestFindOneApplicationConfig(t *testing.T) {
 		jwt_validator.validate_return = mock_user_id
 
 		for i, tt := range tests {
-			t.Run(fmt.Sprintf("returns 200 on %s (%d)", tt.desc, i + 1), func (t *testing.T) {
+			t.Run(fmt.Sprintf("returns 200 (%d)", i + 1), func (t *testing.T) {
 				defer func() {
 					application_service.Clear()
 				}()
 
 				app_uuid := pgtype.UUID{}
 				app_uuid.Scan(tt.app_id)
-				app_cfg_uuid := pgtype.UUID{}
-				expected_app_config := &database.ApplicationConfig{
-					AppID: app_uuid,
-					AppCfgID: app_cfg_uuid,
-					VariablesJson: []byte(tt.expected_variables_json),
+				expected_app_config := &dto.ApplicationConfigResponse{
+					AppID: tt.app_id,
+					AppCfgID: tt.app_id,
+					Port: 8080,
+					VariablesJson: tt.expected_variables_json,
+					ConfigVariables: tt.expected_config_variables,
 				}
 				
-				application_service.Create_config_return = expected_app_config
+				application_service.Find_one_config_return = expected_app_config
 				
-				payload, _ := tt.body.(string)
-
-				req_body := bytes.NewBuffer([]byte(payload))
 				req, _ := http.NewRequest(
-					http.MethodPost,
+					http.MethodGet,
 					fmt.Sprintf("/api/applications/%s/configs", tt.app_id),
-					req_body,
+					nil,
 				)
 				res := httptest.NewRecorder()
 

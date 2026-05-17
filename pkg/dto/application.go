@@ -20,6 +20,7 @@ type CreateApplicationDto struct {
 }
 
 type CreateApplicationConfigDto struct {
+	Port int `json:"port"`
 	Variables map[string]any `json:"variables"`
 }
 
@@ -41,6 +42,7 @@ type ListMyApplicationResponse = []ListMyApplicationEntryApplication
 type ApplicationConfigResponse struct {
 	AppCfgID string`json:"app_cfg_id"`
 	AppID string `json:"app_id"`
+	Port int `json:"port"`
 	VariablesJson string `json:"variables_json"`
 	ConfigVariables map[string]any `json:"config_variables"`
 	CreatedAt time.Time `json:"created_at"`
@@ -105,7 +107,15 @@ func (dto *CreateApplicationConfigDto) Validate() (bool, error) {
 		)
 		valid = false
 	}
-	
+
+	if dto.Port <= 0 || dto.Port > 49151 {
+		validation_errors = errors.Join(
+			validation_errors, 
+			errors.New("invalid port, must be between 1 to 49151"),
+		)
+		valid = false
+	} 
+
 	return valid, validation_errors
 } 
 
