@@ -49,7 +49,16 @@ INSERT INTO "application_deployments" (
   artifacts_path,
   process_name,
   container_name,
-  variables_snapshot_json
+  variables_snapshot_json,
+  version_number
 )
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
+
+-- name: FindCurrentDeployment :one
+SELECT 
+  * 
+FROM 
+  "application_deployments" AS AD
+WHERE 
+  AD.app_id = $1;

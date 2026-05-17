@@ -40,6 +40,7 @@ func TestDeploy(t *testing.T) {
 	t.Run("should return error if application is not found", func (t *testing.T) {
 		defer func () {
 			app_service.Clear()
+			deployment_repository.Clear()
 		}()
 
 		dp, err := deployment_service.Deploy(mock_user_id, mock_app_id, nil, mock_bundle);
@@ -61,6 +62,7 @@ func TestDeploy(t *testing.T) {
 	t.Run("should return error if the logged in user is not a project member", func (t *testing.T) {
 		defer func () {
 			app_service.Clear()
+			deployment_repository.Clear()
 		}()
 
 		app_service.Find_one_error = errors.New("permission_denied")
@@ -84,6 +86,7 @@ func TestDeploy(t *testing.T) {
 	t.Run("should return error if application config is missing", func (t *testing.T) {
 		defer func () {
 			app_service.Clear()
+			deployment_repository.Clear()
 		}()
 
 		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
@@ -109,6 +112,7 @@ func TestDeploy(t *testing.T) {
 	t.Run("should create and return the application deployment db item", func (t *testing.T) {
 		defer func () {
 			app_service.Clear()
+			deployment_repository.Clear()
 		}()
 		
 		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
@@ -146,6 +150,121 @@ func TestDeploy(t *testing.T) {
 
 		if !reflect.DeepEqual(got_dp, expected_deployment) {
 			t.Errorf("got deployment %v, want %v", got_dp, expected_deployment)
+		}
+	})
+
+	t.Run("should return error if find current deployment fails", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+		
+		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
+		mock_app.AppID = pgtype.UUID{}
+		mock_app.AppID.Scan(mock_app_id)
+		mock_app.Name = "Handsome Capybara"
+		mock_app.Type = "container_nodejs"
+		mock_app.ApplicationConfig = database.ApplicationConfig{}
+		mock_app.ApplicationConfig.AppCfgID = pgtype.UUID{}
+		mock_app.ApplicationConfig.AppCfgID.Scan(uuid.New().String())
+		mock_app.ApplicationConfig.VariablesJson = []byte(`PORT=8080`)
+
+		app_service.Find_one_return = mock_app
+
+		expected_deployment := &database.ApplicationDeployment{
+			ContainerName: fmt.Sprintf("abcd:%s:%s", mock_app_id, mock_app.Name),
+		}
+		expected_deployment.AppDpID.Scan(uuid.New())
+		expected_deployment.AppID.Scan(mock_app_id)
+
+		deployment_repository.create_return = expected_deployment
+		deployment_repository.find_current_error = errors.New("Invalid something")
+
+		_, got_err := deployment_service.Deploy(mock_user_id, mock_app_id, &multipart.FileHeader{}, mock_bundle);
+
+		if got_err == nil {
+			t.Errorf("got error nil, want error")
+		}
+	})
+
+	t.Run("should defaults version number to 1 if find current deployment doesn't exist", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+		
+		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
+		mock_app.AppID = pgtype.UUID{}
+		mock_app.AppID.Scan(mock_app_id)
+		mock_app.Name = "Handsome Capybara"
+		mock_app.Type = "container_nodejs"
+		mock_app.ApplicationConfig = database.ApplicationConfig{}
+		mock_app.ApplicationConfig.AppCfgID = pgtype.UUID{}
+		mock_app.ApplicationConfig.AppCfgID.Scan(uuid.New().String())
+		mock_app.ApplicationConfig.VariablesJson = []byte(`PORT=8080`)
+
+		app_service.Find_one_return = mock_app
+
+		expected_deployment := &database.ApplicationDeployment{
+			ContainerName: fmt.Sprintf("abcd:%s:%s", mock_app_id, mock_app.Name),
+		}
+		expected_deployment.AppDpID.Scan(uuid.New())
+		expected_deployment.AppID.Scan(mock_app_id)
+
+		deployment_repository.create_return = expected_deployment
+		deployment_repository.find_current_return = nil
+
+		deployment_service.Deploy(mock_user_id, mock_app_id, &multipart.FileHeader{}, mock_bundle);
+
+		expected_create_dp_arg := deployment_repository.create_call_args[0]
+		
+		got_version_number := expected_create_dp_arg.VersionNumber
+		want_version_number := int32(1)
+
+		if got_version_number != want_version_number {
+			t.Errorf("got deployment version number %v, want %v", got_version_number, want_version_number)
+		}
+	})
+
+	t.Run("should auto-increment version from the current deployment", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+		
+		mock_current_dp := &database.ApplicationDeployment{}
+		mock_current_dp.VersionNumber = 10
+		
+		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
+		mock_app.AppID = pgtype.UUID{}
+		mock_app.AppID.Scan(mock_app_id)
+		mock_app.Name = "Handsome Capybara"
+		mock_app.Type = "container_nodejs"
+		mock_app.ApplicationConfig = database.ApplicationConfig{}
+		mock_app.ApplicationConfig.AppCfgID = pgtype.UUID{}
+		mock_app.ApplicationConfig.AppCfgID.Scan(uuid.New().String())
+		mock_app.ApplicationConfig.VariablesJson = []byte(`PORT=8080`)
+
+		app_service.Find_one_return = mock_app
+
+		expected_deployment := &database.ApplicationDeployment{
+			ContainerName: fmt.Sprintf("abcd:%s:%s", mock_app_id, mock_app.Name),
+		}
+		expected_deployment.AppDpID.Scan(uuid.New())
+		expected_deployment.AppID.Scan(mock_app_id)
+
+		deployment_repository.create_return = expected_deployment
+		deployment_repository.find_current_return = mock_current_dp
+
+		deployment_service.Deploy(mock_user_id, mock_app_id, &multipart.FileHeader{}, mock_bundle);
+
+		expected_create_dp_arg := deployment_repository.create_call_args[0]
+		
+		got_version_number := expected_create_dp_arg.VersionNumber
+		want_version_number := mock_current_dp.VersionNumber + 1
+
+		if got_version_number != want_version_number {
+			t.Errorf("got deployment version number %v, want %v", got_version_number, want_version_number)
 		}
 	})
 }
