@@ -117,9 +117,10 @@ func TestGetFreePort(t *testing.T) {
 	t.Run("should not return the same ports if called concurrently", func (t *testing.T) {
 		defer paService.Clear()
 		
-		done := make(chan struct{})
+		allDone := make(chan struct{})
+		setupDone := make(chan struct{})
 		defer func () {
-			close(done)
+			close(allDone)
 		}()
 		
 		tests := []struct{
@@ -158,11 +159,14 @@ func TestGetFreePort(t *testing.T) {
 					for p := range results {
 						ports[p] += 1
 					}
+					setupDone <- struct{}{}
 				}()
 
 				wg.Wait()
 				close(results)
 
+				<- setupDone
+				
 				got_n_different_ports := 0
 				want_n_different_ports := tt.n_callers
 				for p, n := range ports {
@@ -171,7 +175,7 @@ func TestGetFreePort(t *testing.T) {
 					// * Bind port to claim as long as the test runs
 					listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", p))
 					go func () {
-						<- done
+						<- allDone
 						listener.Close()
 					}()
 
