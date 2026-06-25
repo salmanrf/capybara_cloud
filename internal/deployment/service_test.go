@@ -5,42 +5,117 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"os"
 	"path"
 	"reflect"
 	"regexp"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/moby/moby/client"
+	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
-	"github.com/salmanrf/capybara-cloud/tests"
 )
 
 var mock_user_id = "df3e9f69-bbe4-4cbb-8479-dba87dd17e2c"
 var mock_app_id = "d8dab736-e7a5-49f6-97a0-64670faa2a5d"
-var mock_bundle = multipart.File(&nopCloser{})
+
+var mock_file_content = mock_file{false, []byte{10, 10, 10, 10}}
+var mock_bundle = multipart.File(mock_file_content)
+
+func TestNewService(t *testing.T) {
+	t.Run("should setup directories on service creation", func (t *testing.T) {
+		ctx := context.Background()
+		deployment_repository := &StubAppDeploymentRepository{}
+	
+		deploy_chan := make(chan DeployRequest, 10)
+
+		cfg := utils.GetConfig()
+		cfg.BASE_BUILD_PATH = "/tmp/tests/capybara-builds"
+		cfg.BASE_ARTIFACT_PATH = "/tmp/tests/capybara-artifacts"
+		utils.SetConfig(cfg)
+	
+		port_service := &StubPortAllocatorService{}
+		app_service := &application.StubApplicationService{}
+		NewService(
+			ctx,
+			app_service,
+			port_service,
+			deployment_repository,
+			deploy_chan,
+		)
+
+		_, err := os.ReadDir(cfg.BASE_BUILD_PATH)
+		if err != nil {
+			t.Errorf("got error %v, want nil", err)
+		}
+		_, err = os.ReadDir(cfg.BASE_ARTIFACT_PATH)
+		if err != nil {
+			t.Errorf("got error %v, want nil", err)
+		}
+	})
+
+	t.Run("should panic if directories setup failed", func (t *testing.T) {
+		ctx := context.Background()
+		deployment_repository := &StubAppDeploymentRepository{}
+	
+		deploy_chan := make(chan DeployRequest, 10)
+
+		cfg := utils.GetConfig()
+		cfg.BASE_BUILD_PATH = "/111"
+		cfg.BASE_ARTIFACT_PATH = "/abcd"
+		utils.SetConfig(cfg)
+	
+		port_service := &StubPortAllocatorService{}
+		app_service := &application.StubApplicationService{}
+
+		defer func () {
+			if err := recover(); err == nil {
+				t.Errorf("got error nil, want error")
+			}
+		}()
+		
+		NewService(
+			ctx,
+			app_service,
+			port_service,
+			deployment_repository,
+			deploy_chan,
+		)
+	})
+}
 
 func TestDeploy(t *testing.T) {
 	ctx := context.Background()
 	deployment_repository := &StubAppDeploymentRepository{}
 
-	app_service := &tests.StubApplicationService{}
+	deploy_chan := make(chan DeployRequest, 10)
+
+	cfg := utils.GetConfig()	
+	cfg.BASE_ARTIFACT_PATH = "/tmp/tests/artifacts"
+	cfg.BASE_BUILD_PATH = "/tmp/tests/builds"
+	utils.SetConfig(cfg)
+
+	port_service := &StubPortAllocatorService{}
+	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
 		app_service,
+		port_service,
 		deployment_repository,
+		deploy_chan,
 	)
 
 	t.Run("should return error if application is not found", func (t *testing.T) {
 		defer func () {
 			app_service.Clear()
 			deployment_repository.Clear()
+			for len(deploy_chan) > 0 {
+				<-deploy_chan
+			}
 		}()
 
 		dp, err := deployment_service.Deploy(mock_user_id, mock_app_id, nil, mock_bundle);
@@ -63,6 +138,9 @@ func TestDeploy(t *testing.T) {
 		defer func () {
 			app_service.Clear()
 			deployment_repository.Clear()
+			for len(deploy_chan) > 0 {
+				<-deploy_chan
+			}
 		}()
 
 		app_service.Find_one_error = errors.New("permission_denied")
@@ -87,6 +165,9 @@ func TestDeploy(t *testing.T) {
 		defer func () {
 			app_service.Clear()
 			deployment_repository.Clear()
+			for len(deploy_chan) > 0 {
+				<-deploy_chan
+			}
 		}()
 
 		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
@@ -113,6 +194,9 @@ func TestDeploy(t *testing.T) {
 		defer func () {
 			app_service.Clear()
 			deployment_repository.Clear()
+			for len(deploy_chan) > 0 {
+				<- deploy_chan
+			}
 		}()
 		
 		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
@@ -125,20 +209,39 @@ func TestDeploy(t *testing.T) {
 		mock_app.ApplicationConfig.AppCfgID.Scan(uuid.New().String())
 		mock_app.ApplicationConfig.VariablesJson = []byte(`PORT=8080`)
 
+		want_create_dp_params := database.CreateApplicationDeploymentParams{
+			AppID: mock_app.AppID,
+			ArtifactsPath: "",
+			BuildPath: "",
+			StorageService: "localfs",
+			VariablesSnapshotJson: mock_app.ApplicationConfig.VariablesJson,
+			VersionNumber: 1,
+			Status: DEPLOY_STATUS_INITIATED,
+		}
+
 		app_service.Find_one_return = mock_app
 
 		expected_deployment := &database.ApplicationDeployment{
-			ContainerName: fmt.Sprintf("abcd:%s:%s", mock_app_id, mock_app.Name),
+			AppID: mock_app.AppID,
 		}
 		expected_deployment.AppDpID.Scan(uuid.New())
-		expected_deployment.AppID.Scan(mock_app_id)
 
 		deployment_repository.create_return = expected_deployment
 
-		dp, err := deployment_service.Deploy(mock_user_id, mock_app_id, &multipart.FileHeader{}, mock_bundle);
+		dp, err := deployment_service.Deploy(
+			mock_user_id, 
+			mock_app_id, 
+			&multipart.FileHeader{
+				Filename: "abcd.tar.gz",
+			}, 
+			mock_bundle,
+		);
+
 
 		got_dp := dp
 		got_err := err
+
+		got_create_dp_params := deployment_repository.create_call_args[0]
 
 		if got_err != nil {
 			t.Errorf("got error %v, want nil", got_err)
@@ -151,12 +254,107 @@ func TestDeploy(t *testing.T) {
 		if !reflect.DeepEqual(got_dp, expected_deployment) {
 			t.Errorf("got deployment %v, want %v", got_dp, expected_deployment)
 		}
+
+		if got_create_dp_params.ArtifactsPath == "" {
+			t.Errorf("got empty string artifact_path, want non-empty")
+		}
+
+		if got_create_dp_params.BuildPath == "" {
+			t.Errorf("got empty string build_path, want non-empty")
+		}
+
+		got_create_dp_params.ArtifactsPath = ""
+		got_create_dp_params.BuildPath = ""
+		want_create_dp_params.ArtifactsPath = ""
+		want_create_dp_params.BuildPath = ""
+
+		if !reflect.DeepEqual(got_create_dp_params, want_create_dp_params) {
+			t.Errorf("got create deployment params %v, want %v", got_create_dp_params, want_create_dp_params)
+		}
+	})
+
+	t.Run("should pass a message to deploy_chan on successful creation", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+			for len(deploy_chan) > 0 {
+				<-deploy_chan
+			}
+		}()
+		
+		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
+		mock_app.AppID = pgtype.UUID{}
+		mock_app.AppID.Scan(mock_app_id)
+		mock_app.Name = "Handsome Capybara"
+		mock_app.Type = "container_nodejs"
+		mock_app.ApplicationConfig = database.ApplicationConfig{}
+		mock_app.ApplicationConfig.AppCfgID = pgtype.UUID{}
+		mock_app.ApplicationConfig.AppCfgID.Scan(uuid.New().String())
+		mock_app.ApplicationConfig.VariablesJson = []byte(`PORT=8080`)
+
+		mock_app_dto := database.Application{
+			AppID: mock_app.AppID,
+			ProjectID: mock_app.PmProjectID,
+			Type: mock_app.Type,
+			Name: mock_app.Name,
+			CreatedAt: mock_app.CreatedAt,
+			UpdatedAt: mock_app.UpdatedAt,
+		}
+		mock_app_config_dto := database.ApplicationConfig{
+			AppID: mock_app.AppID,
+			AppCfgID: mock_app.ApplicationConfig.AppCfgID,
+			VariablesJson: mock_app.ApplicationConfig.VariablesJson,
+			CreatedAt: mock_app.ApplicationConfig.CreatedAt,
+			UpdatedAt: mock_app.ApplicationConfig.UpdatedAt,
+		}
+
+		app_service.Find_one_return = mock_app
+
+		expected_deployment := &database.ApplicationDeployment{
+			AppID: mock_app.AppID,
+		}
+		expected_deployment.AppDpID.Scan(uuid.New())
+
+		deployment_repository.create_return = expected_deployment
+
+		timer := time.NewTimer(3 * time.Second)
+		dp, err := deployment_service.Deploy(
+			mock_user_id, 
+			mock_app_id, 
+			&multipart.FileHeader{
+				Filename: "abcd.tar.gz",
+			}, 
+			mock_bundle,
+		);
+
+		got_err := err
+		if got_err != nil {
+			t.Errorf("got error %v, want nil", got_err)
+		}
+
+		want_message := DeployRequest{
+			ApplicationDto: mock_app_dto,
+			ApplicationConfig: mock_app_config_dto,
+			DeploymentDto: *dp,
+		}
+		
+		select {
+		case <- timer.C:
+			t.Errorf("Deploy timeout reached!")
+		case got_dp := <- deploy_chan:
+			if !reflect.DeepEqual(got_dp, want_message) {
+				t.Errorf("got deployment item from deploy_chan %v, want %v", got_dp, want_message)
+			}
+		}
 	})
 
 	t.Run("should return error if find current deployment fails", func (t *testing.T) {
 		defer func () {
 			app_service.Clear()
 			deployment_repository.Clear()
+			for len(deploy_chan) > 0 {
+				<-deploy_chan
+			}
 		}()
 		
 		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
@@ -172,10 +370,9 @@ func TestDeploy(t *testing.T) {
 		app_service.Find_one_return = mock_app
 
 		expected_deployment := &database.ApplicationDeployment{
-			ContainerName: fmt.Sprintf("abcd:%s:%s", mock_app_id, mock_app.Name),
+			AppID: mock_app.AppID,
 		}
 		expected_deployment.AppDpID.Scan(uuid.New())
-		expected_deployment.AppID.Scan(mock_app_id)
 
 		deployment_repository.create_return = expected_deployment
 		deployment_repository.find_current_error = errors.New("Invalid something")
@@ -191,6 +388,9 @@ func TestDeploy(t *testing.T) {
 		defer func () {
 			app_service.Clear()
 			deployment_repository.Clear()
+			for len(deploy_chan) > 0 {
+				<-deploy_chan
+			}
 		}()
 		
 		mock_app := &database.FindOneApplicationWithProjectMemberRow{}
@@ -206,15 +406,21 @@ func TestDeploy(t *testing.T) {
 		app_service.Find_one_return = mock_app
 
 		expected_deployment := &database.ApplicationDeployment{
-			ContainerName: fmt.Sprintf("abcd:%s:%s", mock_app_id, mock_app.Name),
+			AppID: mock_app.AppID,
 		}
 		expected_deployment.AppDpID.Scan(uuid.New())
-		expected_deployment.AppID.Scan(mock_app_id)
 
 		deployment_repository.create_return = expected_deployment
 		deployment_repository.find_current_return = nil
 
-		deployment_service.Deploy(mock_user_id, mock_app_id, &multipart.FileHeader{}, mock_bundle);
+		deployment_service.Deploy(
+			mock_user_id, 
+			mock_app_id, 
+			&multipart.FileHeader{
+				Filename: "zsh.tar.gz",
+			}, 
+			mock_bundle,
+		);
 
 		expected_create_dp_arg := deployment_repository.create_call_args[0]
 		
@@ -230,6 +436,9 @@ func TestDeploy(t *testing.T) {
 		defer func () {
 			app_service.Clear()
 			deployment_repository.Clear()
+			for len(deploy_chan) > 0 {
+				<-deploy_chan
+			}
 		}()
 		
 		mock_current_dp := &database.ApplicationDeployment{}
@@ -248,15 +457,21 @@ func TestDeploy(t *testing.T) {
 		app_service.Find_one_return = mock_app
 
 		expected_deployment := &database.ApplicationDeployment{
-			ContainerName: fmt.Sprintf("abcd:%s:%s", mock_app_id, mock_app.Name),
+			AppID: mock_app.AppID,
 		}
 		expected_deployment.AppDpID.Scan(uuid.New())
-		expected_deployment.AppID.Scan(mock_app_id)
 
 		deployment_repository.create_return = expected_deployment
 		deployment_repository.find_current_return = mock_current_dp
 
-		deployment_service.Deploy(mock_user_id, mock_app_id, &multipart.FileHeader{}, mock_bundle);
+		deployment_service.Deploy(
+			mock_user_id, 
+			mock_app_id, 
+			&multipart.FileHeader{
+				Filename: "asd.tar.gz",
+			}, 
+			mock_bundle,
+		);
 
 		expected_create_dp_arg := deployment_repository.create_call_args[0]
 		
@@ -271,7 +486,7 @@ func TestDeploy(t *testing.T) {
 
 func TestGetFullArtifactPath(t *testing.T) {
 	config := utils.Config{}
-	config.BASE_TEMP_PATH = "/tmp/test_get_full_dir_path"
+	config.BASE_ARTIFACT_PATH = "/tmp/test_get_full_dir_path"
 	
 	mock_app := database.FindOneApplicationWithProjectMemberRow{}
 	mock_app.AppID = pgtype.UUID{}
@@ -292,7 +507,7 @@ func TestGetFullArtifactPath(t *testing.T) {
 		{"Selma Sharia Finance", &multipart.FileHeader{Filename: "selmafin.tar.gz"}},
 	}
 
-	want_basepath := config.BASE_TEMP_PATH + "/artifact"
+	want_basepath := config.BASE_ARTIFACT_PATH + "/artifact"
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("should format app name '%s' into artifact path", tt.appname), func (t *testing.T) {
@@ -345,7 +560,7 @@ func TestGetContainerName(t *testing.T) {
 
 func TestSaveDeployArtifacts(t *testing.T) {
 	config := utils.Config{
-		BASE_TEMP_PATH: "/tmp/test_save_artifact",
+		BASE_ARTIFACT_PATH: "/tmp/test_save_artifact",
 	}
 	
 	mock_app := &database.FindOneApplicationWithProjectMemberRow{}
@@ -355,16 +570,17 @@ func TestSaveDeployArtifacts(t *testing.T) {
 	mock_app.ApplicationConfig = database.ApplicationConfig{}
 	mock_app.ApplicationConfig.AppCfgID = pgtype.UUID{}
 	mock_app.ApplicationConfig.AppCfgID.Scan(uuid.New().String())
-	mock_app.ApplicationConfig.VariablesJson = []byte(`PORT=8080`)
+	mock_app.ApplicationConfig.VariablesJson = []byte(`JWT_SECRET=abcd`)
 
 	tests := []struct{
 		appname string
+		port int
 		samplefilename string
 	}{
-		{"Masbro Capybara", "node-express.tar.gz"},
-		{"Tailung---GreyR4ttts", "node-express.tar.gz"},
-		{"Sophia Foundations Landing Page", "node-express.tar.gz"},
-		{"Selman$$$Finance", "node-express.tar.gz"},
+		{"Masbro Capybara", 3000, "node-express.tar.gz"},
+		{"Tailung---GreyR4ttts", 5050, "node-express.tar.gz"},
+		{"Sophia Foundations Landing Page", 8080, "node-express.tar.gz"},
+		{"Selman$$$Finance", 8888, "node-express.tar.gz"},
 	}
 
 	pwd, _ := os.Getwd()
@@ -387,7 +603,7 @@ func TestSaveDeployArtifacts(t *testing.T) {
 
 			defer func () {
 				samplefile.Close()
-				err := os.RemoveAll(config.BASE_TEMP_PATH)
+				err := os.RemoveAll(config.BASE_ARTIFACT_PATH)
 				if err != nil {
 					fmt.Println("Cleanup error:", err)
 				}
@@ -414,128 +630,61 @@ func TestSaveDeployArtifacts(t *testing.T) {
 	}
 }
 
-func TestStartContainerizedApp(t *testing.T) {
-	ctx := context.Background()
+func TestGetBuildDirPath(t *testing.T) {
+	cfg := utils.GetConfig()
+	cfg.BASE_BUILD_PATH = "/tmp/tests/build"
 	
-	globalConfig := utils.Config{
-		DOCKER_REGISTRY: "capybara-cloud-tests",
-		BASE_TEMP_PATH: "/tmp/test_save_deploy",
-	} 
-	
-	mock_app := database.FindOneApplicationWithProjectMemberRow{}
-	mock_app.AppID = pgtype.UUID{}
-	mock_app.AppID.Scan(mock_app_id)
-	mock_app.Type = "container_nodejs"
-	mock_app.ApplicationConfig = database.ApplicationConfig{}
-	mock_app.ApplicationConfig.AppCfgID = pgtype.UUID{}
-	mock_app.ApplicationConfig.AppCfgID.Scan(uuid.New().String())
-	mock_app.ApplicationConfig.VariablesJson = []byte(`PORT=8080`)
-	mock_deployment := database.ApplicationDeployment{}
-
 	tests := []struct{
-		appname string
-		samplefilename string
+		name string
 	}{
-		{"Handsome Capybara", "node-express.tar.gz"},
-		{"123Tailung&Von Astrea456__greyR4t", "node-express.tar.gz"},
-		{"Sophia Foundations FE", "node-express.tar.gz"},
-		{"Selma Sharia Finance", "node-express.tar.gz"},
+		{"capybara-heyheyhey"},
+		{"Sophia One Commerce "},
+		{"Selma Mobile Banking 123"},
 	}
-
-	pwd, _ := os.Getwd()
-
-	dockerClient, err := client.New(client.FromEnv)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer func () {
-		err = os.RemoveAll(globalConfig.BASE_TEMP_PATH)
-		if err != nil {
-			fmt.Println("Cleanup error:", err)
-		}
-	}()
 
 	for _, tt := range tests {
-		ttmock_app := mock_app
-		ttmock_app.Name = tt.appname
-		ttmock_dp := mock_deployment
-		ttmock_dp.ContainerName = getContainerName(ttmock_app)
-		ttmock_dp.ArtifactsPath = getArtifactDirPath(globalConfig, "", ttmock_app)
-		
-		t.Run(fmt.Sprintf("should start the containerized app %s", getContainerName(ttmock_app)), func (t *testing.T) {
-			samplefile, samplefileerr := os.OpenFile(path.Join(pwd, "samples", tt.samplefilename), os.O_RDONLY, 0) 
-			if samplefileerr != nil {
-				t.Errorf("got open sample file err %v, want nil", samplefileerr)
-			}
-			fstat, fstaterr := samplefile.Stat()
-			if fstaterr != nil {
-				t.Errorf("got sample file stat err %v, want nil", fstaterr)
-			}
-			fheaders := &multipart.FileHeader{
-				Filename: fstat.Name(),
-				Size: fstat.Size(),
-			}
-			ttmock_dp.ArtifactsPath += "/" + fheaders.Filename
-
-			defer func () {
-				samplefile.Close()
-				_, err := dockerClient.ContainerRemove(
-					ctx,
-					ttmock_dp.ContainerName,
-					client.ContainerRemoveOptions{
-						Force: true,
-					},
-				)
-				if err != nil {
-					t.Log("Error cleaning up containers", err)
-				}
-			}()
-			saveDeployArtifacts(globalConfig, ttmock_app, fheaders, samplefile)
-
-			got_err := startContainerizedApp(globalConfig, ttmock_app, ttmock_dp, mock_app.ApplicationConfig)
-
-			if got_err != nil {
-				t.Errorf("got start container error %v, want nil", got_err)
-			}
+		t.Run(fmt.Sprintf("should build path for build step, starting with %s/<app_name_slug>-<timestamp>", cfg.BASE_BUILD_PATH), func (t *testing.T) {
+			app_name := tt.name
+			slug := utils.Slugify(app_name)
+			got_build_path := getBuildDirPath(
+				cfg,
+				"localfs",
+				app_name,
+			)
 			
-			want_container_name := ttmock_dp.ContainerName
-
-			containerFilters := client.Filters{}
-			containerFilters.Add("name", want_container_name)
-			containerList, err := dockerClient.ContainerList(t.Context(), client.ContainerListOptions{
-				Filters: containerFilters,
-			})
-			if err != nil {
-				t.Errorf("got container list error %v, want nil", err)
-			}
-			
-			got_found := false
-			want_found := true
-			for _, ct := range containerList.Items {
-				for _, n := range ct.Names {
-					if strings.Contains(n, want_container_name) {
-						got_found = true
-						break
-					}
-					if got_found {
-						break
-					}
-				}
-			}
-
-			if got_found != want_found {
-				t.Errorf("got container '%s' found == %v, want %v", want_container_name, got_found, want_found)
+			pattern, _ := regexp.Compile(fmt.Sprintf("%s/build-%s-\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2}", cfg.BASE_BUILD_PATH, slug))
+			if !pattern.Match([]byte(got_build_path)) {
+				t.Errorf("got match false (%s), want true", got_build_path)
 			}
 		})
 	}
 }
 
-
-
-type nopCloser struct {
-	io.ReadSeekCloser
-	io.ReaderAt
+type mock_file struct {
+	hasMore bool
+	buf []byte
 }
 
-func (nopCloser) Close() error { return nil }
+type MockFile interface {
+	multipart.File
+}
+
+func (m mock_file) Read(buf []byte) (int, error) {
+	if !m.hasMore {
+		return 0, io.EOF
+	}
+	
+	bp := &buf
+	*bp = m.buf
+	
+	m.hasMore = true
+	
+	return len(m.buf), nil
+}
+func (m mock_file) ReadAt(buf []byte, _ int64) (int, error) {
+	bp := &buf
+	*bp = m.buf
+	return len(m.buf), nil
+}
+func (m mock_file) Seek(int64, int) (n int64, e error) { return n, e }
+func (m mock_file) Close() error { return nil }

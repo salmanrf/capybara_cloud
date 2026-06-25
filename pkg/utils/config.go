@@ -16,7 +16,8 @@ type Config struct {
 	MAX_DEPLOY_FORM_SIZE int
 	MAX_DEPLOY_BUNDLE_SIZE int
 	DOCKER_REGISTRY string
-	BASE_TEMP_PATH string
+	BASE_ARTIFACT_PATH string
+	BASE_BUILD_PATH string
 }
 
 var app_cfg = Config{}
@@ -39,7 +40,8 @@ func LoadConfig(env_path string) (Config, error) {
 		API_PORT:        os.Getenv("API_PORT"),
 		AUTH_JWT_SECRET: os.Getenv("AUTH_JWT_SECRET"),
 		DOCKER_REGISTRY: os.Getenv("DOCKER_REGISTRY"),
-		BASE_TEMP_PATH: os.Getenv("TEMP_ARTIFACT_PATH"),
+		BASE_ARTIFACT_PATH: os.Getenv("BASE_ARTIFACT_PATH"),
+		BASE_BUILD_PATH: os.Getenv("BASE_BUILD_PATH"),
 		MAX_DEPLOY_FORM_SIZE: max_form_size,
 		MAX_DEPLOY_BUNDLE_SIZE: max_bundle_size,
 	}
@@ -86,5 +88,8 @@ func SetConfig(newconf Config) {
 		AUTH_JWT_SECRET: 				newconf.AUTH_JWT_SECRET,
 		MAX_DEPLOY_FORM_SIZE: 	newconf.MAX_DEPLOY_FORM_SIZE,
 		MAX_DEPLOY_BUNDLE_SIZE: newconf.MAX_DEPLOY_BUNDLE_SIZE,
+		DOCKER_REGISTRY: 				newconf.DOCKER_REGISTRY,
+		BASE_ARTIFACT_PATH: 		newconf.BASE_ARTIFACT_PATH,
+		BASE_BUILD_PATH: 				newconf.BASE_BUILD_PATH,
 	}
 }

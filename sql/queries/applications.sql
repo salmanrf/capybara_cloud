@@ -46,23 +46,3 @@ DO UPDATE SET
   variables_json = $3, 
   updated_at = NOW()
 RETURNING *;
-
--- name: CreateApplicationDeployment :one
-INSERT INTO "application_deployments" (
-  app_id,
-  artifacts_path,
-  process_name,
-  container_name,
-  variables_snapshot_json,
-  version_number
-)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING *;
-
--- name: FindCurrentDeployment :one
-SELECT 
-  * 
-FROM 
-  "application_deployments" AS AD
-WHERE 
-  AD.app_id = $1;
