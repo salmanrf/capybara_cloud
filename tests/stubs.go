@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/internal/database"
+	"github.com/salmanrf/capybara-cloud/internal/deployment"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
 )
 
@@ -238,6 +239,11 @@ type StubDeploymentService struct {
 	deploy_calls_arg2 []string
 	deploy_calls_arg3 []*multipart.FileHeader
 	deploy_calls_arg4 []multipart.File
+
+	extract_n_calls   int
+	extract_return    deployment.DeployStepResult
+	extract_err       error
+	extract_call_args []deployment.DeployRequest
 }
 
 func (s *StubDeploymentService) Clear() {
@@ -248,6 +254,11 @@ func (s *StubDeploymentService) Clear() {
 	s.deploy_calls_arg2 = []string{}
 	s.deploy_calls_arg3 = []*multipart.FileHeader{}
 	s.deploy_calls_arg4 = []multipart.File{}
+
+	s.extract_n_calls = 0
+	s.extract_return = deployment.DeployStepResult{}
+	s.extract_err = nil
+	s.extract_call_args = []deployment.DeployRequest{}
 }
 
 func (s *StubDeploymentService) Deploy(user_id string, application_id string, bundle_file_headers *multipart.FileHeader, bundle multipart.File) (*database.ApplicationDeployment, error) {
@@ -257,6 +268,19 @@ func (s *StubDeploymentService) Deploy(user_id string, application_id string, bu
 	s.deploy_calls_arg3 = append(s.deploy_calls_arg3, bundle_file_headers)
 	s.deploy_calls_arg4 = append(s.deploy_calls_arg4, bundle)
 	return s.deploy_return, s.deploy_err
+}
+
+func (s *StubDeploymentService) Extract(dto deployment.DeployRequest) (deployment.DeployStepResult, error) {
+	s.extract_n_calls += 1
+	s.extract_call_args = append(s.extract_call_args, dto)
+
+	result := s.extract_return
+	if result.DeploymentDto == nil {
+		dep := dto.DeploymentDto
+		result.DeploymentDto = &dep
+	}
+
+	return result, s.extract_err
 }
 
 type StubJwtValidator struct {

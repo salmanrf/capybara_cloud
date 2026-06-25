@@ -108,10 +108,10 @@ func (dto *CreateApplicationConfigDto) Validate() (bool, error) {
 		valid = false
 	}
 
-	if dto.Port <= 0 || dto.Port > 49151 {
+	if dto.Port < 1024 || dto.Port > 49151 {
 		validation_errors = errors.Join(
 			validation_errors, 
-			errors.New("invalid port, must be between 1 to 49151"),
+			errors.New("invalid port, must be between 1024 to 49151"),
 		)
 		valid = false
 	} 

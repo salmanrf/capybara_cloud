@@ -407,13 +407,13 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"abcd",
 				`
 				{
-					"port": 1010,
+					"port": 1025,
 					"variables": {
 						"A": "B"
 					}
 				}
 				`,
-				1010,
+				1025,
 				map[string]any{
 					"A": "B",
 				},

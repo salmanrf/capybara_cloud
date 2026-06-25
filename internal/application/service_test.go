@@ -7,13 +7,12 @@ import (
 
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
-	"github.com/salmanrf/capybara-cloud/tests"
 )
 
 func TestApplicationService(t *testing.T) {
 	ctx := context.Background()
 	application_repository := &StubApplicationRepository{}
-	project_service := tests.StubProjectService{}
+	project_service := StubProjectService{}
 
 	application_service := NewService(
 		ctx,

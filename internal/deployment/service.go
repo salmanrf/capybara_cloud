@@ -23,23 +23,106 @@ type service struct {
 	ctx context.Context
 	docker *client.Client
 	app_service application.Service
+	port_service PortAllocatorService
 	deployment_repository DeploymentRepository
+	deploy_chan chan DeployRequest
 }	
 
 type Service interface {
 	Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle multipart.File) (*database.ApplicationDeployment, error)
-	// FindCurrentDeployment(app_id string) (*database.ApplicationDeployment, error)
+	Extract(dto DeployRequest) (DeployStepResult, error)
 }
 
-func NewService(ctx context.Context, app_service application.Service, deployment_repository DeploymentRepository) Service {
+func NewService(
+	ctx context.Context,
+	app_service application.Service,
+	port_service PortAllocatorService,
+	deployment_repository DeploymentRepository,
+	deploy_chan chan DeployRequest,
+) Service {
 	docker, _ := client.New(client.FromEnv)
-	
+
+	cfg := utils.GetConfig()
+	err := utils.EnsureDirExists(cfg.BASE_ARTIFACT_PATH)
+	if err != nil {
+		panic(err)
+	}
+	err = utils.EnsureDirExists(cfg.BASE_BUILD_PATH)
+	if err != nil {
+		panic(err)
+	}
+
 	return &service{
 		ctx,
 		docker,
-		app_service, 
+		app_service,
+		port_service,
 		deployment_repository,
+		deploy_chan,
 	}
+}
+
+func (s *service) Extract(dto DeployRequest) (DeployStepResult, error) {
+	app := dto.ApplicationDto
+	dep := dto.DeploymentDto
+
+	res := DeployStepResult{
+		DeploymentDto: &dep,
+		DeploymentError: nil,
+	}
+	dep.Status = -1 * DEPLOY_STATUS_BUILD_EXTRACTED
+
+	cfg := utils.GetConfig()
+
+	build_path := getBuildDirPath(cfg, "localfs", app.Name)
+	err := utils.EnsureDirExists(build_path)
+	if err != nil {
+		fmt.Println("Unable to create build directory")
+		return res, err
+	}
+	
+	tar, err := exec.LookPath("tar")
+	if err != nil {
+		fmt.Println("Unable to find tar executable")
+		return res, err
+	}
+	cmd := exec.Command(tar, "-xzvf", dep.ArtifactsPath, "-C", build_path)
+	extract_out := bytes.NewBuffer([]byte{})
+	cmd.Stdout = extract_out
+	if err := cmd.Run(); err != nil {
+		fmt.Println(extract_out)
+		fmt.Println("Error extracting bundle file", err)
+		return res, err
+	}
+
+	res.DeploymentDto.Status = DEPLOY_STATUS_BUILD_EXTRACTED
+
+	return res, nil
+}
+
+func (s *service) handleDeployRequest(dto DeployRequest) {
+	app := dto.ApplicationDto
+	dep := dto.DeploymentDto
+	cfg := dto.ApplicationConfig
+
+	appDetails := database.FindOneApplicationWithProjectMemberRow{
+		Name: app.Name,
+		Type: app.Type,
+	}
+	containerName := getContainerName(appDetails)
+	
+	host_port, err := s.port_service.GetFreePort()
+	if err != nil {
+		fmt.Println("handleDeployRequest error allocating port", err)
+	}
+	create_ins_params := database.CreateDeploymentInstanceParams{
+		AppID: app.AppID,
+		DeploymentID: dep.AppDpID,
+		ContainerName: containerName,
+		ContainerPort: cfg.Port,
+		HostPort: int32(host_port),
+	}
+	s.deployment_repository.CreateInstance(create_ins_params)
 }
 
 func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle_file multipart.File) (*database.ApplicationDeployment, error) {
@@ -53,10 +136,10 @@ func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *mul
 		return nil, errors.New("not_found")
 	}
 
-	now := time.Now()
-	deploy_datestr := fmt.Sprintf("%s-%s", now.Format(time.DateOnly), now.Format(time.TimeOnly))
 	artifact_path, err := saveDeployArtifacts(config, *app, bundle_file_headers, bundle_file)
-	container_name := fmt.Sprintf("%s:%s", deploy_datestr, utils.Slugify(app.Name)) 
+	if err != nil {
+		return nil, err
+	}
 
 	next_version := int32(1)
 	current_dp, err := s.deployment_repository.FindCurrent(app_id)
@@ -70,16 +153,42 @@ func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *mul
 	create_dp_params := database.CreateApplicationDeploymentParams{
 		AppID: app.AppID,
 		ArtifactsPath: artifact_path,
-		ProcessName: "",
-		ContainerName: container_name,
+		BuildPath: "abcd",
 		VariablesSnapshotJson: app.ApplicationConfig.VariablesJson,
 		VersionNumber: int32(next_version),
+		StorageService: "localfs",
+		Status: DEPLOY_STATUS_INITIATED,
 	}
 
 	app_deployment, err := s.deployment_repository.Create(create_dp_params)
 	if err != nil {
 		return nil, err
 	}
+
+	app_dto := database.Application{
+		AppID:     app.AppID,
+		ProjectID: app.PmProjectID,
+		Type:      app.Type,
+		Name:      app.Name,
+		CreatedAt: app.CreatedAt,
+		UpdatedAt: app.UpdatedAt,
+	}
+
+	app_config_dto := database.ApplicationConfig{
+		AppCfgID:      app.ApplicationConfig.AppCfgID,
+		AppID:         app.AppID,
+		VariablesJson: app.ApplicationConfig.VariablesJson,
+		CreatedAt:     app.ApplicationConfig.CreatedAt,
+		UpdatedAt:     app.ApplicationConfig.UpdatedAt,
+	}
+
+	deploy_req := DeployRequest{
+		ApplicationDto:    app_dto,
+		ApplicationConfig: app_config_dto,
+		DeploymentDto:     *app_deployment,
+	}
+
+	s.deploy_chan <- deploy_req
 
 	return app_deployment, nil
 }
@@ -96,6 +205,20 @@ func getContainerName(app database.FindOneApplicationWithProjectMemberRow) strin
 	return full_container_name
 }
 
+func getBuildDirPath(config utils.Config, storage_service string, app_name string) string {
+	_ = storage_service
+	
+	now := time.Now()
+	dateformatted := now.Format(time.DateOnly)
+	timeformatted := strings.ReplaceAll(now.Format(time.TimeOnly), ":", "-")
+	deploy_datestr := fmt.Sprintf("%s-%s", dateformatted, timeformatted)
+	appnameslug := utils.Slugify(app_name)
+
+	full_path := fmt.Sprintf("%s/build-%s-%s", config.BASE_BUILD_PATH, appnameslug, deploy_datestr) 
+	
+	return full_path
+}
+
 func getArtifactDirPath(config utils.Config, storage_service string, app database.FindOneApplicationWithProjectMemberRow) string {
 	_ = storage_service
 	
@@ -105,7 +228,7 @@ func getArtifactDirPath(config utils.Config, storage_service string, app databas
 	deploy_datestr := fmt.Sprintf("%s-%s", dateformatted, timeformatted)
 	appnameslug := utils.Slugify(app.Name)
 
-	full_path := fmt.Sprintf("%s/artifact-%s-%s", config.BASE_TEMP_PATH, appnameslug, deploy_datestr) 
+	full_path := fmt.Sprintf("%s/artifact-%s-%s", config.BASE_ARTIFACT_PATH, appnameslug, deploy_datestr) 
 	
 	return full_path
 }
@@ -119,26 +242,9 @@ func saveDeployArtifacts(
 	dir := getArtifactDirPath(config, "", app)
 	full_path := dir + "/" + fileheaders.Filename
 
-	_, err := os.Stat(config.BASE_TEMP_PATH)
+	err := utils.EnsureDirExists(dir)
 	if err != nil {
-		errmsg := err.Error()
-		fmt.Printf("Deploy warning: Unable to check root artifacts directory: %v\n", err.Error())
-		if strings.Contains(errmsg, "no such file") {
-			err = os.Mkdir(config.BASE_TEMP_PATH, 0o774)
-			if err != nil {
-				fmt.Printf("Deploy warning: Unable to create root artifacts directory: %v\n", err.Error())
-				return "", errors.New("Internal error")
-			}	else {
-				fmt.Println("Deploy info: Root artifacts dir created!")
-			}	
-		} else {
-			return "", errors.New("Internal error")
-		}
-	}
-	err = os.Mkdir(dir, 0o774)
-	if err != nil {
-		fmt.Printf("Deploy error: Unable to create artifact directory: %v\n", err.Error())
-		return "", errors.New("Internal error")
+		return "", err
 	}
 
 	file, err := os.OpenFile(full_path, os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0o774)
@@ -167,7 +273,6 @@ func startContainerizedApp(
 	globalcfg utils.Config,
 	app database.FindOneApplicationWithProjectMemberRow,
 	appdp database.ApplicationDeployment,
-	appcfg database.ApplicationConfig,
 ) error {
 	artifact_path := appdp.ArtifactsPath
 	pathsegs := strings.Split(artifact_path, "/")
@@ -223,11 +328,12 @@ func startContainerizedApp(
 	buildLogs := bytes.NewBuffer([]byte{})
 	buildErrs := bytes.NewBuffer([]byte{})
 
+	containerName := getContainerName(app)
 	dockerBuildCtxDir := artifact_dir
 	dockerRegNamespace := globalcfg.DOCKER_REGISTRY
 	dockerRegRepository := utils.Slugify(app.Name)
 	dockerTag := strings.Split(
-		appdp.ContainerName,
+		containerName,
 		fmt.Sprintf("%s-%s-", app.Type, dockerRegRepository),
 	)[1]
 	dockerFullTag := fmt.Sprintf("%s/%s:%s", dockerRegNamespace, dockerRegRepository, dockerTag)
@@ -244,13 +350,13 @@ func startContainerizedApp(
 
 	runLogs := bytes.NewBuffer([]byte{})
 	runErrs := bytes.NewBuffer([]byte{})
-	dockerRunCmd := exec.Command(dockerPath, "run", "--name", appdp.ContainerName, "-d", "-p", "8080:3000", dockerFullTag)
+	dockerRunCmd := exec.Command(dockerPath, "run", "--name", containerName, "-d", "-p", "8080:3000", dockerFullTag)
 	dockerRunCmd.Stdout = runLogs
 	err = dockerRunCmd.Run()
 	if err != nil {
 		fmt.Println("RUN LOGS", runLogs)
 		fmt.Println("RUN ERRS", runErrs)
-		fmt.Println("Unable to start container " + appdp.ContainerName, err)
+		fmt.Println("Unable to start container " + containerName, err)
 		return err
 	}
 
