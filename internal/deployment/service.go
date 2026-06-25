@@ -100,6 +100,31 @@ func (s *service) Extract(dto DeployRequest) (DeployStepResult, error) {
 	return res, nil
 }
 
+func (s *service) handleDeployRequest(dto DeployRequest) {
+	app := dto.ApplicationDto
+	dep := dto.DeploymentDto
+	cfg := dto.ApplicationConfig
+
+	appDetails := database.FindOneApplicationWithProjectMemberRow{
+		Name: app.Name,
+		Type: app.Type,
+	}
+	containerName := getContainerName(appDetails)
+	
+	host_port, err := s.port_service.GetFreePort()
+	if err != nil {
+		fmt.Println("handleDeployRequest error allocating port", err)
+	}
+	create_ins_params := database.CreateDeploymentInstanceParams{
+		AppID: app.AppID,
+		DeploymentID: dep.AppDpID,
+		ContainerName: containerName,
+		ContainerPort: cfg.Port,
+		HostPort: int32(host_port),
+	}
+	s.deployment_repository.CreateInstance(create_ins_params)
+}
+
 func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle_file multipart.File) (*database.ApplicationDeployment, error) {
 	config := utils.GetConfig()
 	

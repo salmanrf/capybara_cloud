@@ -71,12 +71,15 @@ func main() {
 	queries := database.New(db_conn)
 	application_repository := application.NewRepository(ctx, queries)
 	deployment_repository := deployment.NewDeploymentRepository(ctx, queries)
+	deploy_chan := make(chan deployment.DeployRequest)
+	
 	user_service := user.NewService(ctx, queries)
 	auth_service := auth.NewService(ctx, user_service)
 	org_service := organization.NewService(ctx, db_conn, queries, user_service)
 	project_service := project.NewService(ctx, db_conn, queries, user_service)
 	application_service := application.NewService(ctx, application_repository, project_service)
-	deployment_service := deployment.NewService(ctx, application_service, deployment_repository)
+	port_allocator_service := deployment.NewPortAllocatorService()
+	deployment_service := deployment.NewService(ctx, application_service, port_allocator_service, deployment_repository, deploy_chan)
 	jwt_utils := auth_utils.NewJWTUtils(cfg.AUTH_JWT_SECRET)
 
 	api_server := api.NewAPIServer(
