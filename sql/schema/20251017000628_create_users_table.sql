@@ -1,5 +1,9 @@
 -- +goose Up
 -- +goose StatementBegin
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- +goose StatementEnd
+
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS "users" (
   "user_id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   "username" varchar(100) UNIQUE NOT NULL,
