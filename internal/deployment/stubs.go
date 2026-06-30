@@ -109,6 +109,11 @@ type StubService struct {
 	extract_error     error
 	extract_n_calls   int
 	extract_call_args []DeployRequest
+
+	build_return    DeployStepResult
+	build_error     error
+	build_n_calls   int
+	build_call_args []DeployRequest
 }
 
 type deployCallArgs struct {
@@ -128,6 +133,11 @@ func (s *StubService) Clear() {
 	s.extract_error = nil
 	s.extract_n_calls = 0
 	s.extract_call_args = nil
+
+	s.build_return = DeployStepResult{}
+	s.build_error = nil
+	s.build_n_calls = 0
+	s.build_call_args = nil
 }
 
 func (s *StubService) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle multipart.File) (*database.ApplicationDeployment, error) {
@@ -145,11 +155,12 @@ func (s *StubService) Extract(dto DeployRequest) (DeployStepResult, error) {
 	s.extract_n_calls += 1
 	s.extract_call_args = append(s.extract_call_args, dto)
 
-	result := s.extract_return
-	if result.DeploymentDto == nil {
-		dep := dto.DeploymentDto
-		result.DeploymentDto = &dep
-	}
+	return s.extract_return, s.extract_error
+}
 
-	return result, s.extract_error
+func (s *StubService) Build(dto DeployRequest) (DeployStepResult, error) {
+	s.build_n_calls += 1
+	s.build_call_args = append(s.build_call_args, dto)
+
+	return s.build_return, s.build_error
 }
