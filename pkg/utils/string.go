@@ -3,6 +3,7 @@ package utils
 import (
 	"regexp"
 	"strings"
+	"time"
 )
 
 func Slugify(in string) string {
@@ -21,4 +22,13 @@ func Slugify(in string) string {
 	ret.Write([]byte(parts[partsn - 1]))
 
 	return ret.String()
+}
+
+func DockerSafeDateString(t time.Time) string {
+	datestr := t.Format(time.DateTime)
+
+	pattern, _ := regexp.Compile("[ :]")
+	cleaned := string(pattern.ReplaceAll([]byte(datestr), []byte("-")))
+	
+	return cleaned
 }

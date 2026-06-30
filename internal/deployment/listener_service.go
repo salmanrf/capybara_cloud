@@ -1,6 +1,8 @@
 package deployment
 
-import "github.com/salmanrf/capybara-cloud/internal/database"
+import (
+	"github.com/salmanrf/capybara-cloud/internal/database"
+)
 
 type DeployRequest struct {
 	ApplicationDto    database.Application
@@ -35,13 +37,24 @@ func NewListener(in_channel chan DeployRequest, out_channel chan DeployStepResul
 func (l *listener) Listen() {
 	for {
 		in, ok := <- l.in_channel
-		if ok {
+		if !ok {
+			continue
+		}
+		switch in.DeploymentDto.Status {
+		case DEPLOY_STATUS_INITIATED:
 			go l.handleExtract(in, l.out_channel)
+		case DEPLOY_STATUS_BUILD_EXTRACTED:
+			go l.handleBuild(in, l.out_channel)
 		}
 	}
 }
 
 func (l *listener) handleExtract(dto DeployRequest, out chan <- DeployStepResult) {
 	result, _ := l.deploy_service.Extract(dto)
+	out <- result
+}
+
+func (l *listener) handleBuild(dto DeployRequest, out chan <- DeployStepResult) {
+	result, _ := l.deploy_service.Build(dto)
 	out <- result
 }

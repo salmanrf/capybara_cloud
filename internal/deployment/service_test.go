@@ -524,6 +524,52 @@ func TestGetFullArtifactPath(t *testing.T) {
 	}
 }
 
+func TestGetContainerImageName(t *testing.T) {
+	cfg := utils.GetConfig()
+	cfg.DOCKER_REGISTRY = "masmasbro"
+	utils.SetConfig(cfg)
+	
+	tests := []struct{
+		name string
+		version int
+	}{
+		{"capybara masbro", 1},
+		{"sophia shops", 10},
+		{"capybara web services", 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("should return the full docker image name + tag for '%s'", tt.name), func (t *testing.T) {
+			mock_app := database.Application{
+				Name: tt.name,	
+				Type: APP_TYPE_NODEJS_CONTAINER,
+			}
+			created_at := pgtype.Timestamp{}
+			created_at.Scan(time.Now())
+			mock_dp := database.ApplicationDeployment{
+				VersionNumber: int32(tt.version),
+				CreatedAt: created_at,
+			}
+			slugified := utils.Slugify(mock_app.Name)
+			tag := fmt.Sprintf("%s-%03s", utils.DockerSafeDateString(mock_dp.CreatedAt.Time), fmt.Sprintf("%d", mock_dp.VersionNumber))
+			
+			format := fmt.Sprintf("^docker.io/%s/%s:%s$", cfg.DOCKER_REGISTRY, slugified, tag)
+			want_pattern, err := regexp.Compile(format)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got_str := getContainerImageName(mock_app, mock_dp)
+			if got_match := want_pattern.Match([]byte(got_str)); !got_match {
+				t.Errorf("got container image name %s, want matching %s", got_str, want_pattern.String())
+			}
+
+			t.Logf("Got container image reference: %s", got_str)
+		})
+	}
+	
+}
+
 func TestGetContainerName(t *testing.T) {
 	mock_app := database.FindOneApplicationWithProjectMemberRow{}
 	mock_app.AppID = pgtype.UUID{}
