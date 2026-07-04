@@ -42,6 +42,7 @@ func TestNewService(t *testing.T) {
 		app_service := &application.StubApplicationService{}
 		NewService(
 			ctx,
+			&StubDocker{},
 			app_service,
 			port_service,
 			deployment_repository,
@@ -77,9 +78,10 @@ func TestNewService(t *testing.T) {
 				t.Errorf("got error nil, want error")
 			}
 		}()
-		
+
 		NewService(
 			ctx,
+			&StubDocker{},
 			app_service,
 			port_service,
 			deployment_repository,
@@ -103,6 +105,7 @@ func TestDeploy(t *testing.T) {
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		&StubDocker{},
 		app_service,
 		port_service,
 		deployment_repository,

@@ -13,15 +13,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/client"
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/docker"
 )
 
 type service struct {
 	ctx context.Context
-	docker *client.Client
+	docker docker.Docker
 	app_service application.Service
 	port_service PortAllocatorService
 	deployment_repository DeploymentRepository
@@ -32,17 +32,17 @@ type Service interface {
 	Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle multipart.File) (*database.ApplicationDeployment, error)
 	Extract(dto DeployRequest) (DeployStepResult, error)
 	Build(dto DeployRequest) (DeployStepResult, error)
+	Push(dto DeployRequest) (DeployStepResult, error)
 }
 
 func NewService(
 	ctx context.Context,
+	docker_service docker.Docker,
 	app_service application.Service,
 	port_service PortAllocatorService,
 	deployment_repository DeploymentRepository,
 	deploy_chan chan DeployRequest,
 ) Service {
-	docker, _ := client.New(client.FromEnv)
-
 	cfg := utils.GetConfig()
 	err := utils.EnsureDirExists(cfg.BASE_ARTIFACT_PATH)
 	if err != nil {
@@ -55,7 +55,7 @@ func NewService(
 
 	return &service{
 		ctx,
-		docker,
+		docker_service,
 		app_service,
 		port_service,
 		deployment_repository,
@@ -179,6 +179,28 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	res.DeploymentDto.Status = DEPLOY_STATUS_BUILD_IMAGE_BUILT
 	res.DeploymentDto.ContainerImgName = docker_full_image_reference
 	res.DeploymentDto.ContainerRegistry = cfg.DOCKER_REGISTRY
+
+	return res, err
+}
+
+func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
+	new_deployment := dto.DeploymentDto
+	res.DeploymentDto = &new_deployment
+	
+	dockerimg, err := s.docker.FindOneImageByName(dto.DeploymentDto.ContainerImgName)
+	if err != nil || dockerimg == nil {
+		new_deployment.Status = -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		return res, errors.New("image_not_found")
+	}
+
+	err = s.docker.Push(dockerimg)
+	if err != nil {
+		err_msg := fmt.Sprintf("image_push_failed: %s", err.Error())
+		new_deployment.Status = -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		return res, errors.New(err_msg)
+	}
+
+	new_deployment.Status = DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 
 	return res, err
 }

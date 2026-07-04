@@ -244,6 +244,16 @@ type StubDeploymentService struct {
 	extract_return    deployment.DeployStepResult
 	extract_err       error
 	extract_call_args []deployment.DeployRequest
+
+	build_n_calls   int
+	build_return    deployment.DeployStepResult
+	build_err       error
+	build_call_args []deployment.DeployRequest
+
+	push_n_calls   int
+	push_return    deployment.DeployStepResult
+	push_err       error
+	push_call_args []deployment.DeployRequest
 }
 
 func (s *StubDeploymentService) Clear() {
@@ -259,6 +269,16 @@ func (s *StubDeploymentService) Clear() {
 	s.extract_return = deployment.DeployStepResult{}
 	s.extract_err = nil
 	s.extract_call_args = []deployment.DeployRequest{}
+
+	s.build_n_calls = 0
+	s.build_return = deployment.DeployStepResult{}
+	s.build_err = nil
+	s.build_call_args = []deployment.DeployRequest{}
+
+	s.push_n_calls = 0
+	s.push_return = deployment.DeployStepResult{}
+	s.push_err = nil
+	s.push_call_args = []deployment.DeployRequest{}
 }
 
 func (s *StubDeploymentService) Deploy(user_id string, application_id string, bundle_file_headers *multipart.FileHeader, bundle multipart.File) (*database.ApplicationDeployment, error) {
@@ -281,6 +301,32 @@ func (s *StubDeploymentService) Extract(dto deployment.DeployRequest) (deploymen
 	}
 
 	return result, s.extract_err
+}
+
+func (s *StubDeploymentService) Build(dto deployment.DeployRequest) (deployment.DeployStepResult, error) {
+	s.build_n_calls += 1
+	s.build_call_args = append(s.build_call_args, dto)
+
+	result := s.build_return
+	if result.DeploymentDto == nil {
+		dep := dto.DeploymentDto
+		result.DeploymentDto = &dep
+	}
+
+	return result, s.build_err
+}
+
+func (s *StubDeploymentService) Push(dto deployment.DeployRequest) (deployment.DeployStepResult, error) {
+	s.push_n_calls += 1
+	s.push_call_args = append(s.push_call_args, dto)
+
+	result := s.push_return
+	if result.DeploymentDto == nil {
+		dep := dto.DeploymentDto
+		result.DeploymentDto = &dep
+	}
+
+	return result, s.push_err
 }
 
 type StubJwtValidator struct {

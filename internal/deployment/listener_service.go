@@ -45,6 +45,8 @@ func (l *listener) Listen() {
 			go l.handleExtract(in, l.out_channel)
 		case DEPLOY_STATUS_BUILD_EXTRACTED:
 			go l.handleBuild(in, l.out_channel)
+		case DEPLOY_STATUS_BUILD_IMAGE_BUILT:
+			go l.handlePush(in, l.out_channel)
 		}
 	}
 }
@@ -56,5 +58,10 @@ func (l *listener) handleExtract(dto DeployRequest, out chan <- DeployStepResult
 
 func (l *listener) handleBuild(dto DeployRequest, out chan <- DeployStepResult) {
 	result, _ := l.deploy_service.Build(dto)
+	out <- result
+}
+
+func (l *listener) handlePush(dto DeployRequest, out chan <- DeployStepResult) {
+	result, _ := l.deploy_service.Push(dto)
 	out <- result
 }
