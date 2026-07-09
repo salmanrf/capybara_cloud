@@ -9,7 +9,7 @@ import (
 
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 type app_handler struct {

@@ -7,7 +7,7 @@ import (
 	"os"
 
 	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 func LoginGuard(validator auth_utils.JWT,  next http.Handler) http.HandlerFunc {

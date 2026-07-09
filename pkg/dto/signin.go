@@ -3,7 +3,7 @@ package dto
 import (
 	"errors"
 
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 type SigninDto struct {

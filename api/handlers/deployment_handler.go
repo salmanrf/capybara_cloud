@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/salmanrf/capybara-cloud/internal/deployment"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 type deployment_handler struct {
@@ -46,7 +47,7 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 		)
 		return
 	}
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	if content_length > cfg.MAX_DEPLOY_FORM_SIZE {
 		utils.ResponseWithError(
 			w,

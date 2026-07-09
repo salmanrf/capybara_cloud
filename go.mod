@@ -7,7 +7,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.6
 )
 
-require github.com/salmanrf/capybara-cloud/shared v0.0.0-00010101000000-000000000000 // indirect
+require github.com/salmanrf/capybara-cloud/shared v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -21,7 +21,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/jaevor/go-nanoid v1.4.0
+	github.com/jaevor/go-nanoid v1.4.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.55.0
 	github.com/moby/moby/client v0.5.0

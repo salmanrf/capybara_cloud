@@ -18,7 +18,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
 	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	config "github.com/salmanrf/capybara-cloud/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/shared/docker"
 )
 
@@ -33,11 +33,11 @@ func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
 	return dbpool
 }
 
-func setup() (context.Context, utils.Config, *pgxpool.Pool, error) {
+func setup() (context.Context, config.Config, *pgxpool.Pool, error) {
 	pwd, _ := os.Getwd()
 	envpath := filepath.Join(pwd, ".env")
 
-	cfg, err := utils.LoadConfig(envpath)
+	cfg, err := config.LoadConfig(envpath)
 	if err != nil {
 		return nil, cfg, nil, err
 	}

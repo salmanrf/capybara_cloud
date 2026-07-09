@@ -4,7 +4,7 @@ import (
 	"errors"
 	"regexp"
 
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 type SignupDto struct {
