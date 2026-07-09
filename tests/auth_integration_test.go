@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/salmanrf/capybara-cloud/api"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 func TestAuthSignupIntegration(t *testing.T) {

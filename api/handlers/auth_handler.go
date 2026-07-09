@@ -11,7 +11,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/user"
 	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 type auth_handler struct {

@@ -18,7 +18,8 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
 	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/docker"
 )
 
 func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
@@ -32,11 +33,11 @@ func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
 	return dbpool
 }
 
-func setup() (context.Context, utils.Config, *pgxpool.Pool, error) {
+func setup() (context.Context, config.Config, *pgxpool.Pool, error) {
 	pwd, _ := os.Getwd()
 	envpath := filepath.Join(pwd, ".env")
 
-	cfg, err := utils.LoadConfig(envpath)
+	cfg, err := config.LoadConfig(envpath)
 	if err != nil {
 		return nil, cfg, nil, err
 	}
@@ -79,7 +80,11 @@ func main() {
 	project_service := project.NewService(ctx, db_conn, queries, user_service)
 	application_service := application.NewService(ctx, application_repository, project_service)
 	port_allocator_service := deployment.NewPortAllocatorService()
-	deployment_service := deployment.NewService(ctx, application_service, port_allocator_service, deployment_repository, deploy_chan)
+	docker_service, err := docker.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+	deployment_service := deployment.NewService(ctx, docker_service, application_service, port_allocator_service, deployment_repository, deploy_chan)
 	jwt_utils := auth_utils.NewJWTUtils(cfg.AUTH_JWT_SECRET)
 
 	api_server := api.NewAPIServer(

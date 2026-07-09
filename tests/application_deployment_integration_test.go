@@ -11,7 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/salmanrf/capybara-cloud/api/routes"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 func TestCreateApplicationDeployment(t *testing.T) {
@@ -66,10 +67,10 @@ func TestCreateApplicationDeployment(t *testing.T) {
 	})
 
 	t.Run("should return status 400/422 when validation failed", func (t *testing.T) {
-		conf, _ := utils.LoadConfig("./.env.test")
+		conf, _ := config.LoadConfig("./.env.test")
 		conf.MAX_DEPLOY_BUNDLE_SIZE = 100
 		conf.MAX_DEPLOY_FORM_SIZE = 100
-		utils.SetConfig(conf)
+		config.SetConfig(conf)
 		
 		expected_app_id := "b87fcac7-05bc-4342-ad43-96c6e3c8afa3"
 
@@ -175,10 +176,10 @@ func TestCreateApplicationDeployment(t *testing.T) {
 					deployment_service.Clear()
 				}()
 				
-				cfg, _ := utils.LoadConfig("./.env.test")
+				cfg, _ := config.LoadConfig("./.env.test")
 				cfg.MAX_DEPLOY_FORM_SIZE = tt.max_form_size
 				cfg.MAX_DEPLOY_BUNDLE_SIZE = tt.max_bundle_size
-				utils.SetConfig(cfg)
+				config.SetConfig(cfg)
 
 				formdata := utils.NewMultipartForm()
 				formdata.SetFile("bundle", "bundle.tar.gz", tt.bundlesize, "application/gzip")
@@ -206,16 +207,16 @@ func TestCreateApplicationDeployment(t *testing.T) {
 	})
 
 	t.Run("should return status 200 on successful deployment", func (t *testing.T) {
-		conf, _ := utils.LoadConfig("./.env.test")
+		conf, _ := config.LoadConfig("./.env.test")
 		conf.MAX_DEPLOY_BUNDLE_SIZE = 500
 		conf.MAX_DEPLOY_FORM_SIZE = 500
-		utils.SetConfig(conf)
+		config.SetConfig(conf)
 		
 		defer func () {
 			deployment_service.Clear()
 		}()
 		
-		utils.LoadConfig("./.env.test")
+		config.LoadConfig("./.env.test")
 		expected_app_id := "b87fcac7-05bc-4342-ad43-96c6e3c8afa3"
 		formdata := utils.NewMultipartForm()
 		formdata.SetFile("bundle", "bundle.tar.gz", 100, "application/gzip")

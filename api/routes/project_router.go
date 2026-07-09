@@ -8,7 +8,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/api/middleware"
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/pkg/auth"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 func SetupProjectRouter(project_service project.Service, jwt_validator auth.JWT) chi.Router {

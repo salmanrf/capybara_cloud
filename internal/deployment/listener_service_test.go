@@ -3,6 +3,7 @@ package deployment
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,7 +19,8 @@ import (
 
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 func TestDeployListener(t *testing.T) {
@@ -107,6 +109,44 @@ func TestDeployListener(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("should call push when status is DEPLOY_STATUS_BUILD_IMAGE_BUILT", func (t *testing.T) {
+		defer func () {
+			deployment_service.Clear()
+		}()
+		
+		req := deploy_request
+		req.DeploymentDto.Status = DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		
+		go listener_service.Listen()
+		in_chan <- req
+
+		timer := time.NewTimer(time.Second)
+
+		select {
+		case <- timer.C:
+			t.Fatal("unexpected timeout")
+		case <- out_chan:
+			want_extract_called := 0
+			got_extract_called := deployment_service.extract_n_calls
+			if got_extract_called != want_extract_called {
+				t.Errorf("got extract called %d time, want %d", got_extract_called, want_extract_called)
+			}
+
+			want_build_called := 0
+			got_build_called := deployment_service.build_n_calls
+			if got_build_called != want_build_called {
+				t.Errorf("got build called %d time, want %d", got_build_called, want_build_called)
+			}
+
+			want_push_called := 1
+			got_push_called := deployment_service.push_n_calls
+
+			if got_push_called != want_push_called {
+				t.Errorf("got push called %d time, want %d", got_push_called, want_push_called)
+			}
+		}
+	})
 }
 
 func TestDeployExtract(t *testing.T) {
@@ -117,6 +157,7 @@ func TestDeployExtract(t *testing.T) {
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		&StubDocker{},
 		app_service,
 		port_service,
 		deployment_repository,
@@ -124,9 +165,9 @@ func TestDeployExtract(t *testing.T) {
 	)
 
 	t.Run("should perform artifact extraction when status is DEPLOY_STATUS_INITIATED = 1", func (t *testing.T) {
-		cfg := utils.GetConfig()
+		cfg := config.GetConfig()
 		cfg.BASE_BUILD_PATH = "/tmp/tests/build-artifacts"
-		utils.SetConfig(cfg)
+		config.SetConfig(cfg)
 		
 		// * Uses /deployment/test-samples/<filename>
 		type test struct{
@@ -283,16 +324,17 @@ func TestDeployBuild(t *testing.T) {
 	ctx := context.Background()
 	deployment_repository := &StubAppDeploymentRepository{}
 
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	cfg.DOCKER_REGISTRY = "salmanrf"
 	cfg.BASE_BUILD_PATH = "/tmp/masmasbro/builds"
 	cfg.BASE_ARTIFACT_PATH = "/tmp/masmasbro/artifacts"
-	utils.SetConfig(cfg)
+	config.SetConfig(cfg)
 
 	port_service := &StubPortAllocatorService{}
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		&StubDocker{},
 		app_service,
 		port_service,
 		deployment_repository,
@@ -451,9 +493,9 @@ func TestDeployBuild(t *testing.T) {
 	})
 	
 	t.Run("should perform artifact build when status is DEPLOY_STATUS_BUILD_EXTRACTED", func (t *testing.T) {
-		cfg := utils.GetConfig()
+		cfg := config.GetConfig()
 		cfg.BASE_BUILD_PATH = "/tmp/tests/build-artifacts"
-		utils.SetConfig(cfg)
+		config.SetConfig(cfg)
 
 		pwd, err := os.Getwd()
 		if err != nil {
@@ -612,6 +654,178 @@ func TestDeployBuild(t *testing.T) {
 			if err == nil {
 				t.Fatal("got error nil, want error no such file / directory does")
 			}
+		}
+	})
+}
+
+func TestDeployPush(t *testing.T) {
+	ctx := context.Background()
+	deployment_repository := &StubAppDeploymentRepository{}
+
+	cfg := config.GetConfig()
+	cfg.DOCKER_REGISTRY = "salmanrf"
+	cfg.BASE_BUILD_PATH = "/tmp/masmasbro/builds"
+	cfg.BASE_ARTIFACT_PATH = "/tmp/masmasbro/artifacts"
+	config.SetConfig(cfg)
+
+	port_service := &StubPortAllocatorService{}
+	app_service := &application.StubApplicationService{}
+	docker := &StubDocker{}
+	deployment_service := NewService(
+		ctx,
+		docker,
+		app_service,
+		port_service,
+		deployment_repository,
+		make(chan DeployRequest, 1),
+	)
+
+	t.Run("should return error if container image not found", func (t *testing.T) {
+		docker.find_one_image_by_name_return = nil
+		docker.find_one_image_by_name_error = nil
+
+		deploy_req := DeployRequest{
+			ApplicationDto: database.Application{},
+			ApplicationConfig: database.ApplicationConfig{},
+			DeploymentDto: database.ApplicationDeployment{},
+		}
+
+		res, err := deployment_service.Push(deploy_req)
+		if err == nil {
+			t.Fatalf("got error '%v', want '%v'", err, errors.New("image_not_found"))
+		}
+
+		got_dp := res.DeploymentDto
+		if got_dp == nil {
+			t.Errorf("got new deployment nil, want non-nil")
+		}
+
+		got_new_status := got_dp.Status
+		want_new_status := -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		if got_new_status != int32(want_new_status) {
+			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
+		}
+	})
+
+	t.Run("should return error if push fails", func (t *testing.T) {
+		mock_image_summary := &image.Summary{
+			ID: "abcd",
+			RepoTags: []string{"mrfreshgallery-123"},
+		}
+		docker.find_one_image_by_name_return = mock_image_summary
+		docker.find_one_image_by_name_error = nil
+		docker.push_return = errors.New("fatal error")
+
+		defer docker.Clear()
+
+		mock_dp := database.ApplicationDeployment{
+			ContainerImgName: "mrfreshgallery-backend-123",
+		}
+		deploy_req := DeployRequest{
+			ApplicationDto: database.Application{
+				Name: "mrfreshgallery",
+			},
+			ApplicationConfig: database.ApplicationConfig{},
+			DeploymentDto: mock_dp,
+		}
+
+		res, got_err := deployment_service.Push(deploy_req)
+		want_err_msg := fmt.Sprintf("image_push_failed: %s", docker.push_return.Error())
+		want_error := errors.New(want_err_msg)
+		if got_err == nil {
+			t.Fatalf("got error '%v', want '%v'", got_err, want_error)
+		}
+
+		got_dp := res.DeploymentDto
+		if got_dp == nil {
+			t.Errorf("got new deployment nil, want non-nil")
+		}
+
+		got_new_status := got_dp.Status
+		want_new_status := -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		if got_new_status != int32(want_new_status) {
+			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
+		}
+	})
+	
+	t.Run("should correctly uses internal Docker API", func (t *testing.T) {
+		mock_image_summary := &image.Summary{
+			ID: "abcd",
+			RepoTags: []string{"mrfreshgallery-123"},
+		}
+		docker.find_one_image_by_name_return = mock_image_summary
+		docker.find_one_image_by_name_error = nil
+
+		defer docker.Clear()
+
+		mock_dp := database.ApplicationDeployment{
+			ContainerImgName: "mrfreshgallery-backend-123",
+		}
+		deploy_req := DeployRequest{
+			ApplicationDto: database.Application{
+				Name: "mrfreshgallery",
+			},
+			ApplicationConfig: database.ApplicationConfig{},
+			DeploymentDto: mock_dp,
+		}
+
+		_, err := deployment_service.Push(deploy_req)
+	
+		got_find_called_n_times := docker.find_one_image_by_name_return_n_calls
+		want_find_called_n_times := 1
+		if got_find_called_n_times != want_find_called_n_times {
+			t.Errorf("got find one image called %d times, want %d times", got_find_called_n_times, want_find_called_n_times)
+		}
+
+		got_find_called_with_name := docker.find_one_image_by_name_return_call_args[0]
+		want_find_called_with_name := mock_dp.ContainerImgName
+		if got_find_called_with_name != want_find_called_with_name {
+			t.Errorf("got find one image called with '%s', want '%s'", got_find_called_with_name, want_find_called_with_name)
+		}
+
+		got_push_called_n_times := docker.push_return_n_calls
+		want_push_called_n_times := 1
+		if got_push_called_n_times != want_push_called_n_times {
+			t.Errorf("got push called %d times, want %d times", got_push_called_n_times, want_push_called_n_times)
+		}
+		
+		if err != nil {
+			t.Fatalf("got unexpected error %v, want nil", err)
+		}
+	})
+
+	t.Run("should perform push when image exists", func (t *testing.T) {
+		mock_image_summary := &image.Summary{
+			ID: "abcd",
+			RepoTags: []string{"mrfreshgallery-123"},
+		}
+		docker.find_one_image_by_name_return = mock_image_summary
+		docker.find_one_image_by_name_error = nil
+
+		defer docker.Clear()
+
+		deploy_req := DeployRequest{
+			ApplicationDto: database.Application{
+				Name: "mrfreshgallery",
+			},
+			ApplicationConfig: database.ApplicationConfig{},
+			DeploymentDto: database.ApplicationDeployment{},
+		}
+
+		res, err := deployment_service.Push(deploy_req)
+		if err != nil {
+			t.Fatalf("got unexpected error %v, want nil", err)
+		}
+
+		got_dp := res.DeploymentDto
+		if got_dp == nil {
+			t.Error("got updated deployment nil, want non-nil")
+		}
+
+		got_new_status := got_dp.Status
+		want_new_status := DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		if got_new_status != int32(want_new_status) {
+			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
 		}
 	})
 }

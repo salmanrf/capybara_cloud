@@ -114,6 +114,11 @@ type StubService struct {
 	build_error     error
 	build_n_calls   int
 	build_call_args []DeployRequest
+
+	push_return    DeployStepResult
+	push_error     error
+	push_n_calls   int
+	push_call_args []DeployRequest
 }
 
 type deployCallArgs struct {
@@ -138,6 +143,11 @@ func (s *StubService) Clear() {
 	s.build_error = nil
 	s.build_n_calls = 0
 	s.build_call_args = nil
+
+	s.push_return = DeployStepResult{}
+	s.push_error = nil
+	s.push_n_calls = 0
+	s.push_call_args = nil
 }
 
 func (s *StubService) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle multipart.File) (*database.ApplicationDeployment, error) {
@@ -163,4 +173,11 @@ func (s *StubService) Build(dto DeployRequest) (DeployStepResult, error) {
 	s.build_call_args = append(s.build_call_args, dto)
 
 	return s.build_return, s.build_error
+}
+
+func (s *StubService) Push(dto DeployRequest) (DeployStepResult, error) {
+	s.push_n_calls += 1
+	s.push_call_args = append(s.push_call_args, dto)
+
+	return s.push_return, s.push_error
 }

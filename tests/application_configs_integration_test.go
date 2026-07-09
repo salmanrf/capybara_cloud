@@ -18,7 +18,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/api/routes"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 func TestCreateApplicationConfig(t *testing.T) {
