@@ -17,7 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 var mock_user_id = "df3e9f69-bbe4-4cbb-8479-dba87dd17e2c"
@@ -33,10 +34,10 @@ func TestNewService(t *testing.T) {
 	
 		deploy_chan := make(chan DeployRequest, 10)
 
-		cfg := utils.GetConfig()
+		cfg := config.GetConfig()
 		cfg.BASE_BUILD_PATH = "/tmp/tests/capybara-builds"
 		cfg.BASE_ARTIFACT_PATH = "/tmp/tests/capybara-artifacts"
-		utils.SetConfig(cfg)
+		config.SetConfig(cfg)
 	
 		port_service := &StubPortAllocatorService{}
 		app_service := &application.StubApplicationService{}
@@ -65,10 +66,10 @@ func TestNewService(t *testing.T) {
 	
 		deploy_chan := make(chan DeployRequest, 10)
 
-		cfg := utils.GetConfig()
+		cfg := config.GetConfig()
 		cfg.BASE_BUILD_PATH = "/111"
 		cfg.BASE_ARTIFACT_PATH = "/abcd"
-		utils.SetConfig(cfg)
+		config.SetConfig(cfg)
 	
 		port_service := &StubPortAllocatorService{}
 		app_service := &application.StubApplicationService{}
@@ -96,10 +97,10 @@ func TestDeploy(t *testing.T) {
 
 	deploy_chan := make(chan DeployRequest, 10)
 
-	cfg := utils.GetConfig()	
+	cfg := config.GetConfig()	
 	cfg.BASE_ARTIFACT_PATH = "/tmp/tests/artifacts"
 	cfg.BASE_BUILD_PATH = "/tmp/tests/builds"
-	utils.SetConfig(cfg)
+	config.SetConfig(cfg)
 
 	port_service := &StubPortAllocatorService{}
 	app_service := &application.StubApplicationService{}
@@ -488,7 +489,7 @@ func TestDeploy(t *testing.T) {
 }
 
 func TestGetFullArtifactPath(t *testing.T) {
-	config := utils.Config{}
+	config := config.Config{}
 	config.BASE_ARTIFACT_PATH = "/tmp/test_get_full_dir_path"
 	
 	mock_app := database.FindOneApplicationWithProjectMemberRow{}
@@ -528,9 +529,9 @@ func TestGetFullArtifactPath(t *testing.T) {
 }
 
 func TestGetContainerImageName(t *testing.T) {
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	cfg.DOCKER_REGISTRY = "masmasbro"
-	utils.SetConfig(cfg)
+	config.SetConfig(cfg)
 	
 	tests := []struct{
 		name string
@@ -608,7 +609,7 @@ func TestGetContainerName(t *testing.T) {
 }
 
 func TestSaveDeployArtifacts(t *testing.T) {
-	config := utils.Config{
+	config := config.Config{
 		BASE_ARTIFACT_PATH: "/tmp/test_save_artifact",
 	}
 	
@@ -680,7 +681,7 @@ func TestSaveDeployArtifacts(t *testing.T) {
 }
 
 func TestGetBuildDirPath(t *testing.T) {
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	cfg.BASE_BUILD_PATH = "/tmp/tests/build"
 	
 	tests := []struct{

@@ -19,7 +19,8 @@ import (
 
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 func TestDeployListener(t *testing.T) {
@@ -164,9 +165,9 @@ func TestDeployExtract(t *testing.T) {
 	)
 
 	t.Run("should perform artifact extraction when status is DEPLOY_STATUS_INITIATED = 1", func (t *testing.T) {
-		cfg := utils.GetConfig()
+		cfg := config.GetConfig()
 		cfg.BASE_BUILD_PATH = "/tmp/tests/build-artifacts"
-		utils.SetConfig(cfg)
+		config.SetConfig(cfg)
 		
 		// * Uses /deployment/test-samples/<filename>
 		type test struct{
@@ -323,11 +324,11 @@ func TestDeployBuild(t *testing.T) {
 	ctx := context.Background()
 	deployment_repository := &StubAppDeploymentRepository{}
 
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	cfg.DOCKER_REGISTRY = "salmanrf"
 	cfg.BASE_BUILD_PATH = "/tmp/masmasbro/builds"
 	cfg.BASE_ARTIFACT_PATH = "/tmp/masmasbro/artifacts"
-	utils.SetConfig(cfg)
+	config.SetConfig(cfg)
 
 	port_service := &StubPortAllocatorService{}
 	app_service := &application.StubApplicationService{}
@@ -492,9 +493,9 @@ func TestDeployBuild(t *testing.T) {
 	})
 	
 	t.Run("should perform artifact build when status is DEPLOY_STATUS_BUILD_EXTRACTED", func (t *testing.T) {
-		cfg := utils.GetConfig()
+		cfg := config.GetConfig()
 		cfg.BASE_BUILD_PATH = "/tmp/tests/build-artifacts"
-		utils.SetConfig(cfg)
+		config.SetConfig(cfg)
 
 		pwd, err := os.Getwd()
 		if err != nil {
@@ -661,11 +662,11 @@ func TestDeployPush(t *testing.T) {
 	ctx := context.Background()
 	deployment_repository := &StubAppDeploymentRepository{}
 
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	cfg.DOCKER_REGISTRY = "salmanrf"
 	cfg.BASE_BUILD_PATH = "/tmp/masmasbro/builds"
 	cfg.BASE_ARTIFACT_PATH = "/tmp/masmasbro/artifacts"
-	utils.SetConfig(cfg)
+	config.SetConfig(cfg)
 
 	port_service := &StubPortAllocatorService{}
 	app_service := &application.StubApplicationService{}

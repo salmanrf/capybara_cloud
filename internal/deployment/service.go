@@ -15,7 +15,8 @@ import (
 
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
-	"github.com/salmanrf/capybara-cloud/pkg/utils"
+	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 	"github.com/salmanrf/capybara-cloud/shared/docker"
 )
 
@@ -43,7 +44,7 @@ func NewService(
 	deployment_repository DeploymentRepository,
 	deploy_chan chan DeployRequest,
 ) Service {
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	err := utils.EnsureDirExists(cfg.BASE_ARTIFACT_PATH)
 	if err != nil {
 		panic(err)
@@ -73,7 +74,7 @@ func (s *service) Extract(dto DeployRequest) (DeployStepResult, error) {
 	}
 	dep.Status = -1 * DEPLOY_STATUS_BUILD_EXTRACTED
 
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 
 	build_path := getBuildDirPath(cfg, "localfs", app.Name)
 	err := utils.EnsureDirExists(build_path)
@@ -102,7 +103,7 @@ func (s *service) Extract(dto DeployRequest) (DeployStepResult, error) {
 }
 
 func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	
 	dep := dto.DeploymentDto
 	if _, err := os.ReadDir(dep.BuildPath); err != nil {
@@ -231,7 +232,7 @@ func (s *service) handleDeployRequest(dto DeployRequest) {
 }
 
 func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle_file multipart.File) (*database.ApplicationDeployment, error) {
-	config := utils.GetConfig()
+	config := config.GetConfig()
 	
 	app, err := s.app_service.FindOne(app_id, user_id)
 	if err != nil {
@@ -299,7 +300,7 @@ func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *mul
 }
 
 func getContainerImageName(app database.Application, dep database.ApplicationDeployment) string {
-	cfg := utils.GetConfig()
+	cfg := config.GetConfig()
 	
 	regspace := fmt.Sprintf("docker.io/%s", cfg.DOCKER_REGISTRY)
 	repo := utils.Slugify(app.Name)
@@ -324,7 +325,7 @@ func getContainerName(app database.FindOneApplicationWithProjectMemberRow) strin
 	return full_container_name
 }
 
-func getBuildDirPath(config utils.Config, storage_service string, app_name string) string {
+func getBuildDirPath(config config.Config, storage_service string, app_name string) string {
 	_ = storage_service
 	
 	now := time.Now()
@@ -338,7 +339,7 @@ func getBuildDirPath(config utils.Config, storage_service string, app_name strin
 	return full_path
 }
 
-func getArtifactDirPath(config utils.Config, storage_service string, app database.FindOneApplicationWithProjectMemberRow) string {
+func getArtifactDirPath(config config.Config, storage_service string, app database.FindOneApplicationWithProjectMemberRow) string {
 	_ = storage_service
 	
 	now := time.Now()
@@ -353,7 +354,7 @@ func getArtifactDirPath(config utils.Config, storage_service string, app databas
 }
 
 func saveDeployArtifacts(
-	config utils.Config,
+	config config.Config,
 	app database.FindOneApplicationWithProjectMemberRow, 
 	fileheaders *multipart.FileHeader,
 	bundle_file multipart.File,
@@ -389,7 +390,7 @@ func saveDeployArtifacts(
 }
 
 func startContainerizedApp(
-	globalcfg utils.Config,
+	globalcfg config.Config,
 	app database.FindOneApplicationWithProjectMemberRow,
 	appdp database.ApplicationDeployment,
 ) error {
