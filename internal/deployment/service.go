@@ -16,8 +16,8 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	config "github.com/salmanrf/capybara-cloud/pkg/utils"
-	"github.com/salmanrf/capybara-cloud/shared/utils"
 	"github.com/salmanrf/capybara-cloud/shared/docker"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 type service struct {
@@ -194,7 +194,7 @@ func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
 		return res, errors.New("image_not_found")
 	}
 
-	err = s.docker.Push(dockerimg)
+	err = s.docker.Push(dockerimg.RepoTags[0])
 	if err != nil {
 		err_msg := fmt.Sprintf("image_push_failed: %s", err.Error())
 		new_deployment.Status = -DEPLOY_STATUS_BUILD_IMAGE_PUSHED

@@ -80,7 +80,13 @@ func main() {
 	project_service := project.NewService(ctx, db_conn, queries, user_service)
 	application_service := application.NewService(ctx, application_repository, project_service)
 	port_allocator_service := deployment.NewPortAllocatorService()
-	docker_service, err := docker.New()
+	docker_service, err := docker.New(
+		docker.DockerConfig{
+			Registry: cfg.DOCKER_REGISTRY,
+			AccessToken: cfg.DOCKER_ACCESS_TOKEN,
+			Username: cfg.DOCKER_USER,
+		},
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
