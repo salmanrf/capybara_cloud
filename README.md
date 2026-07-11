@@ -4,7 +4,7 @@ Capybara Cloud is an open source, self-hosted, "Bring your own cloud", AI-assist
 
 # Documentations
 
-- **[System Design Doc](https://excalidraw.com/#json=3yPz0qTveR2ej6J0Nx8u9,NTsf1Y6HhyxlPl0KiIFC2w)**
+- **[System Design Doc](https://link.excalidraw.com/l/35TAAPVqrQL/1c4VCvhYhX5)**
   The same document is available at `docs/system-design-docs.excalidraw`.
 
 # Project Structure
