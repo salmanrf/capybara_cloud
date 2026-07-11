@@ -749,9 +749,13 @@ func TestDeployPush(t *testing.T) {
 	})
 	
 	t.Run("should correctly uses internal Docker API", func (t *testing.T) {
+		cfg := config.GetConfig()
+		cfg.DOCKER_REGISTRY = "docker.io/test"
+		config.SetConfig(cfg)
+		
 		mock_image_summary := &image.Summary{
 			ID: "abcd",
-			RepoTags: []string{"mrfreshgallery-123"},
+			RepoTags: []string{"mrfreshgallery-backend-123"},
 		}
 		docker.find_one_image_by_name_return = mock_image_summary
 		docker.find_one_image_by_name_error = nil
@@ -759,7 +763,8 @@ func TestDeployPush(t *testing.T) {
 		defer docker.Clear()
 
 		mock_dp := database.ApplicationDeployment{
-			ContainerImgName: "mrfreshgallery-backend-123",
+			ContainerImgName: 
+				fmt.Sprintf("%s/mrfreshgallery-backend-123", cfg.DOCKER_REGISTRY),
 		}
 		deploy_req := DeployRequest{
 			ApplicationDto: database.Application{
@@ -771,6 +776,9 @@ func TestDeployPush(t *testing.T) {
 
 		_, err := deployment_service.Push(deploy_req)
 	
+		parts := strings.Split(mock_dp.ContainerImgName, fmt.Sprintf("%s/", cfg.DOCKER_REGISTRY))
+		want_repo_tag := parts[1]
+
 		got_find_called_n_times := docker.find_one_image_by_name_return_n_calls
 		want_find_called_n_times := 1
 		if got_find_called_n_times != want_find_called_n_times {
@@ -778,7 +786,7 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_find_called_with_name := docker.find_one_image_by_name_return_call_args[0]
-		want_find_called_with_name := mock_dp.ContainerImgName
+		want_find_called_with_name := want_repo_tag
 		if got_find_called_with_name != want_find_called_with_name {
 			t.Errorf("got find one image called with '%s', want '%s'", got_find_called_with_name, want_find_called_with_name)
 		}
@@ -791,6 +799,12 @@ func TestDeployPush(t *testing.T) {
 		
 		if err != nil {
 			t.Fatalf("got unexpected error %v, want nil", err)
+		}
+
+		got_push_called_with_name := docker.push_return_call_args[0]
+		want_push_called_with_name := want_repo_tag
+		if got_push_called_with_name!= want_push_called_with_name {
+			t.Errorf("got push called with container image name %s, want %s", got_push_called_with_name, want_push_called_with_name)
 		}
 	})
 

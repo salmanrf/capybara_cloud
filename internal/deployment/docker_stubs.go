@@ -11,7 +11,7 @@ type StubDocker struct {
 
 	push_return error
 	push_return_n_calls int
-	push_return_call_args []*image.Summary
+	push_return_call_args []string
 }
 
 func (s *StubDocker) Clear() {
@@ -32,7 +32,7 @@ func (s *StubDocker) FindOneImageByName(name string) (*image.Summary, error) {
 	return s.find_one_image_by_name_return, s.find_one_image_by_name_error
 }
 
-func (s *StubDocker) Push(img *image.Summary) error {
+func (s *StubDocker) Push(img string) error {
 	s.push_return_n_calls += 1
 	s.push_return_call_args = append(s.push_return_call_args, img)
 
