@@ -187,14 +187,16 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
 	new_deployment := dto.DeploymentDto
 	res.DeploymentDto = &new_deployment
+
+	repotag := utils.GetDockerRepoTagFromFullName(dto.DeploymentDto.ContainerImgName)
 	
-	dockerimg, err := s.docker.FindOneImageByName(dto.DeploymentDto.ContainerImgName)
+	dockerimg, err := s.docker.FindOneImageByName(repotag)
 	if err != nil || dockerimg == nil {
 		new_deployment.Status = -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 		return res, errors.New("image_not_found")
 	}
 
-	err = s.docker.Push(dockerimg.RepoTags[0])
+	err = s.docker.Push(repotag)
 	if err != nil {
 		err_msg := fmt.Sprintf("image_push_failed: %s", err.Error())
 		new_deployment.Status = -DEPLOY_STATUS_BUILD_IMAGE_PUSHED

@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+func GetDockerRepoTagFromFullName(full string) string {
+	parts := strings.Split(full, "/")
+	size := len(parts)
+	
+	return parts[size - 1]
+}
+
 func Slugify(in string) string {
 	pattern, _ := regexp.Compile("[^A-Za-z0-9 ]")
 	cleaned := string(pattern.ReplaceAll([]byte(in), []byte{}))
