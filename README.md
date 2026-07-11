@@ -52,18 +52,22 @@ MAX_DEPLOY_BUNDLE_SIZE=
 
 # Development Status
 
-## Space Module — Complete
+**Conventions**
+
+- **Module**: modules in the context of this document refers not to specifically go modules but a general encapsulation of related pieces of code.
+
+## Space Module
 
 - Organization, project, and application CRUD
 - Session-based authentication
 - Full integration test coverage (TDD)
 
-## Deployment Module — In Progress
+## Deployment Module
 
-- Single-host application deployment via multipart form upload.
-- Custom multipart/form-data mocker for testing..
+Multi-step deployment module.
 
-## Provisioning Module — Planned
+## Masbro Worker Module
 
-- Event based host registration.
-- TCP connection pinger.
+This is the core of Capybara Cloud, Masbro Workers are the services that actually runs the deployed applications and providing interfaces to them.
+
+## Masbro Manager Module
