@@ -1,32 +1,33 @@
-package auth
+package utils
 
 import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type auth_utils struct {
 	jwt_secret string
+	issuer     string
+	audience   []string
 }
 
 type JWT interface {
-	MakeJWT(user_id pgtype.UUID, jwt_secret string, expires_in time.Duration) (string, error)
+	MakeJWT(sub string, jwt_secret string, expires_in time.Duration) (string, error)
 	ValidateJWT(token string, jwt_secret string) (string, error)
 }
 
-func NewJWTUtils(jwt_secret string) JWT {
-	return &auth_utils{jwt_secret}
+func NewJWTUtils(jwt_secret string, issuer string, audience []string) JWT {
+	return &auth_utils{jwt_secret, issuer, audience}
 }
 
-func (auth *auth_utils) MakeJWT(user_id pgtype.UUID, jwt_secret string, expires_in time.Duration) (string, error) {
+func (auth *auth_utils) MakeJWT(sub string, jwt_secret string, expires_in time.Duration) (string, error) {
 	token := jwt.NewWithClaims(
-		jwt.SigningMethodHS256, 
+		jwt.SigningMethodHS256,
 		jwt.RegisteredClaims{
-			Issuer: "capybara cloud",
-			Subject: user_id.String(),
-			Audience: jwt.ClaimStrings{"capybara cloud app"},
+			Issuer: auth.issuer,
+			Subject: sub,
+			Audience: jwt.ClaimStrings(auth.audience),
 			IssuedAt: &jwt.NumericDate{Time: time.Now()},
 			ExpiresAt: &jwt.NumericDate{Time: time.Now().Add(expires_in)},
 		},
@@ -43,21 +44,21 @@ func (auth *auth_utils) MakeJWT(user_id pgtype.UUID, jwt_secret string, expires_
 
 func (auth *auth_utils) ValidateJWT(token string, jwt_secret string) (string, error) {
 	claims := jwt.RegisteredClaims{}
-	
+
 	_, err := jwt.ParseWithClaims(
-		token, 
-		&claims, 
+		token,
+		&claims,
 		func (token *jwt.Token) (any, error) {
-			return []byte(jwt_secret), nil 
-		}, 
+			return []byte(jwt_secret), nil
+		},
 		func (parser *jwt.Parser) {},
 	)
 
 	if err != nil {
 		return "", err
 	}
-	
+
 	sub := claims.Subject
-	
+
 	return sub , nil
 }

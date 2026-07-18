@@ -8,10 +8,10 @@ import (
 	"github.com/salmanrf/capybara-cloud/api/middleware"
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/deployment"
-	"github.com/salmanrf/capybara-cloud/pkg/auth"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
-func SetupApplicationRouter(application_service application.Service, deployment_service deployment.Service, jwt_validator auth.JWT) chi.Router {
+func SetupApplicationRouter(application_service application.Service, deployment_service deployment.Service, jwt_validator utils.JWT) chi.Router {
 	r := chi.NewRouter()
 	
 	app_handlers := handlers.NewAppHandlers(application_service)

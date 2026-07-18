@@ -12,7 +12,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/organization"
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
-	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 type api_server struct {
@@ -27,7 +27,7 @@ func NewAPIServer(
 	auth_service auth.Service,
 	org_service organization.Service,
 	project_service project.Service,
-	jwt_validator auth_utils.JWT,
+	jwt_validator utils.JWT,
 ) http.Handler {
 	router := chi.NewRouter()
 
