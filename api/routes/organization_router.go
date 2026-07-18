@@ -7,11 +7,10 @@ import (
 	"github.com/salmanrf/capybara-cloud/api/handlers"
 	"github.com/salmanrf/capybara-cloud/api/middleware"
 	"github.com/salmanrf/capybara-cloud/internal/organization"
-	"github.com/salmanrf/capybara-cloud/pkg/auth"
 	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
-func SetupOrganizationRouter(org_service organization.Service, jwt_validator auth.JWT) chi.Router {
+func SetupOrganizationRouter(org_service organization.Service, jwt_validator utils.JWT) chi.Router {
 	r := chi.NewRouter()
 
 	org_handlers := handlers.NewOrgHandlers(org_service)

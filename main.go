@@ -17,9 +17,9 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/organization"
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
-	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
 	config "github.com/salmanrf/capybara-cloud/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/shared/docker"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
 func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
@@ -91,7 +91,7 @@ func main() {
 		log.Fatal(err)
 	}
 	deployment_service := deployment.NewService(ctx, docker_service, application_service, port_allocator_service, deployment_repository, deploy_chan)
-	jwt_utils := auth_utils.NewJWTUtils(cfg.AUTH_JWT_SECRET)
+	jwt_utils := utils.NewJWTUtils(cfg.AUTH_JWT_SECRET, cfg.AUTH_JWT_ISSUER, []string{cfg.AUTH_JWT_AUDIENCE})
 
 	api_server := api.NewAPIServer(
 		ctx,

@@ -7,10 +7,10 @@ import (
 	"github.com/salmanrf/capybara-cloud/api/handlers"
 	auth_module "github.com/salmanrf/capybara-cloud/internal/auth"
 	"github.com/salmanrf/capybara-cloud/internal/user"
-	auth_utils "github.com/salmanrf/capybara-cloud/pkg/auth"
+	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
-func SetupAuthRouter(auth_service auth_module.Service, user_service user.Service, jwt_utils auth_utils.JWT) chi.Router {
+func SetupAuthRouter(auth_service auth_module.Service, user_service user.Service, jwt_utils utils.JWT) chi.Router {
 	r := chi.NewRouter()
 
 	auth_handlers := handlers.NewAuthHandlers(auth_service, user_service, jwt_utils)

@@ -17,7 +17,7 @@ import (
 type auth_handler struct {
 	auth_service auth_module.Service
 	user_service user.Service
-	jwt_utils    auth_utils.JWT
+	jwt_utils    utils.JWT
 }
 
 type AuthHandlers interface {
@@ -26,7 +26,7 @@ type AuthHandlers interface {
 	HandleSignin(w http.ResponseWriter, r *http.Request)
 }
 
-func NewAuthHandlers(auth_service auth_module.Service, user_service user.Service, jwt_utils auth_utils.JWT) AuthHandlers {
+func NewAuthHandlers(auth_service auth_module.Service, user_service user.Service, jwt_utils utils.JWT) AuthHandlers {
 	return &auth_handler{
 		auth_service,
 		user_service,
@@ -157,7 +157,7 @@ func (h *auth_handler) HandleSignin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jwt_string, err := h.jwt_utils.MakeJWT(user.UserID, os.Getenv("AUTH_JWT_SECRET"), time.Hour * 24)
+	jwt_string, err := h.jwt_utils.MakeJWT(user.UserID.String(), os.Getenv("AUTH_JWT_SECRET"), time.Hour * 24)
 
 	if err != nil {
 		fmt.Println("Error building jwt for signin", err.Error())

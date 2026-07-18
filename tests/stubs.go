@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/internal/deployment"
 	"github.com/salmanrf/capybara-cloud/pkg/dto"
@@ -340,7 +339,7 @@ func (v *StubJwtValidator) ValidateJWT(token, secret string) (string, error) {
 	return v.validate_return, v.validate_error
 }
 
-func (v *StubJwtValidator) MakeJWT(user_id pgtype.UUID, jwt_secret string, expires_in time.Duration) (string, error) {
+func (v *StubJwtValidator) MakeJWT(sub string, jwt_secret string, expires_in time.Duration) (string, error) {
 	return v.make_return, v.make_error
 }
 
