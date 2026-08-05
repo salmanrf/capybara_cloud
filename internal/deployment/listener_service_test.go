@@ -20,6 +20,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	shared_deployment "github.com/salmanrf/capybara-cloud/shared/deployment"
 	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
@@ -28,15 +29,16 @@ func TestDeployListener(t *testing.T) {
 	out_chan := make(chan DeployStepResult)
 
 	deployment_service := StubService{}
-	listener_service := NewListener(in_chan, out_chan, &deployment_service)
+	masbro_service := StubMasbroService{}
+	listener_service := NewListener(in_chan, out_chan, &deployment_service, &masbro_service)
 
 	mock_app := database.Application{
 		Name: "testapp",
-		Type: APP_TYPE_NODEJS_CONTAINER,
+		Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 	}
 	mock_dp := database.ApplicationDeployment{
 		AppID: mock_app.AppID,
-		Status: DEPLOY_STATUS_INITIATED,
+		Status: shared_deployment.DEPLOY_STATUS_INITIATED,
 		ArtifactsPath: "",
 		BuildPath: "",
 		VersionNumber: 1,
@@ -57,7 +59,7 @@ func TestDeployListener(t *testing.T) {
 		}()
 		
 		req := deploy_request
-		req.DeploymentDto.Status = DEPLOY_STATUS_INITIATED
+		req.DeploymentDto.Status = shared_deployment.DEPLOY_STATUS_INITIATED
 		
 		go listener_service.Listen()
 		in_chan <- req 
@@ -83,7 +85,7 @@ func TestDeployListener(t *testing.T) {
 		}()
 		
 		req := deploy_request
-		req.DeploymentDto.Status = DEPLOY_STATUS_BUILD_EXTRACTED
+		req.DeploymentDto.Status = shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
 		
 		go listener_service.Listen()
 		in_chan <- req
@@ -116,7 +118,7 @@ func TestDeployListener(t *testing.T) {
 		}()
 		
 		req := deploy_request
-		req.DeploymentDto.Status = DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		req.DeploymentDto.Status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 		
 		go listener_service.Listen()
 		in_chan <- req
@@ -147,13 +149,42 @@ func TestDeployListener(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("should call start when status is DEPLOY_STATUS_BUILD_IMAGE_PUSHED", func (t *testing.T) {
+		defer func () {
+			deployment_service.Clear()
+		}()
+
+		req := deploy_request
+		req.DeploymentDto.Status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+
+		go listener_service.Listen()
+		in_chan <- req
+
+		timer := time.NewTimer(time.Second)
+		<- timer.C
+
+		want_push_called := 0
+		got_push_called := deployment_service.push_n_calls
+
+		if got_push_called != want_push_called {
+			t.Errorf("got push called %d time, want %d", got_push_called, want_push_called)
+		}
+
+		want_start_called := 1
+		got_start_called := masbro_service.start_n_calls
+
+		if got_start_called != want_start_called {
+			t.Errorf("got masbro start called %d time, want %d", got_start_called, want_start_called)
+		}
+	})
 }
 
 func TestDeployExtract(t *testing.T) {
 	ctx := context.Background()
 	deployment_repository := &StubAppDeploymentRepository{}
 
-	port_service := &StubPortAllocatorService{}
+	port_service := &shared_deployment.StubPortAllocatorService{}
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
@@ -228,7 +259,7 @@ func TestDeployExtract(t *testing.T) {
 				
 				mock_app := database.Application{
 					Name: tt.name,
-					Type: APP_TYPE_NODEJS_CONTAINER,
+					Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 				}	
 
 				want_build_path := getBuildDirPath(cfg, "localfs", mock_app.Name)
@@ -278,7 +309,7 @@ func TestDeployExtract(t *testing.T) {
 
 				mock_dp := database.ApplicationDeployment{
 					AppID: mock_app.AppID,
-					Status: DEPLOY_STATUS_INITIATED,
+					Status: shared_deployment.DEPLOY_STATUS_INITIATED,
 					ArtifactsPath: tt.artifact_path,
 					BuildPath: want_build_path,
 					VersionNumber: 1,
@@ -300,7 +331,7 @@ func TestDeployExtract(t *testing.T) {
 
 				dep := res.DeploymentDto
 				got_new_status := dep.Status
-				want_new_status := DEPLOY_STATUS_BUILD_EXTRACTED
+				want_new_status := shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
 
 				if got_new_status != int32(want_new_status) {
 					t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
@@ -330,7 +361,7 @@ func TestDeployBuild(t *testing.T) {
 	cfg.BASE_ARTIFACT_PATH = "/tmp/masmasbro/artifacts"
 	config.SetConfig(cfg)
 
-	port_service := &StubPortAllocatorService{}
+	port_service := &shared_deployment.StubPortAllocatorService{}
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
@@ -359,21 +390,21 @@ func TestDeployBuild(t *testing.T) {
 		{
 			uuid.New(),
 			"abcd",
-			APP_TYPE_NODEJS_CONTAINER,
+			shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 			"abcd.tar.gz",
 			"",
 		},
 		{
 			uuid.New(),
 			"app-html",
-			APP_TYPE_NODEJS_CONTAINER,
+			shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 			"sample-html.tar.gz",
 			"",
 		},
 		{
 			uuid.New(),
 			"app-vue",
-			APP_TYPE_NODEJS_CONTAINER,
+			shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 			"sample-vue.tar.gz",
 			"",
 		},
@@ -385,14 +416,14 @@ func TestDeployBuild(t *testing.T) {
 			t.Run(fmt.Sprintf("should return error if %s doesn't exist", want_build_path), func (t *testing.T) {
 				mock_app := database.Application{
 					Name: tt.name,
-					Type: APP_TYPE_NODEJS_CONTAINER,
+					Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 				}	
 				
 				created_at := pgtype.Timestamp{}
 				created_at.Scan(time.Now())
 				mock_dp := database.ApplicationDeployment{
 					AppID: mock_app.AppID,
-					Status: DEPLOY_STATUS_INITIATED,
+					Status: shared_deployment.DEPLOY_STATUS_INITIATED,
 					ArtifactsPath: tt.artifact_path,
 					BuildPath: want_build_path,
 					VersionNumber: 1,
@@ -416,7 +447,7 @@ func TestDeployBuild(t *testing.T) {
 				}
 
 				got_new_status := res.DeploymentDto.Status
-				want_new_status := -DEPLOY_STATUS_BUILD_IMAGE_BUILT
+				want_new_status := -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 				
 				if int(got_new_status) != want_new_status {
 					t.Errorf("got new status %d, want %d", got_new_status, want_new_status)
@@ -450,7 +481,7 @@ func TestDeployBuild(t *testing.T) {
 			
 			mock_app := database.Application{
 				Name: tt.name,
-				Type: APP_TYPE_NODEJS_CONTAINER,
+				Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 			}	
 				
 			want_build_path := getBuildDirPath(cfg, "localfs", mock_app.Name)
@@ -459,7 +490,7 @@ func TestDeployBuild(t *testing.T) {
 			created_at.Scan(time.Now())
 			mock_dp := database.ApplicationDeployment{
 				AppID: mock_app.AppID,
-				Status: DEPLOY_STATUS_INITIATED,
+				Status: shared_deployment.DEPLOY_STATUS_INITIATED,
 				ArtifactsPath: tt.artifact_path,
 				BuildPath: want_build_path,
 				VersionNumber: 1,
@@ -511,7 +542,7 @@ func TestDeployBuild(t *testing.T) {
 				
 			mock_app := database.Application{
 				Name: tt.name,
-				Type: APP_TYPE_NODEJS_CONTAINER,
+				Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 			}	
 			
 			want_build_path := getBuildDirPath(cfg, "localfs", mock_app.Name)
@@ -519,7 +550,7 @@ func TestDeployBuild(t *testing.T) {
 			created_at.Scan(time.Now())
 			mock_dp := database.ApplicationDeployment{
 				AppID: mock_app.AppID,
-				Status: DEPLOY_STATUS_INITIATED,
+				Status: shared_deployment.DEPLOY_STATUS_INITIATED,
 				ArtifactsPath: tt.artifact_path,
 				BuildPath: want_build_path,
 				VersionNumber: 1,
@@ -592,7 +623,7 @@ func TestDeployBuild(t *testing.T) {
 				}
 
 				got_new_status := res.DeploymentDto.Status
-				want_new_status := DEPLOY_STATUS_BUILD_IMAGE_BUILT
+				want_new_status := shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 				if got_new_status != int32(want_new_status) {
 					t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
 				}
@@ -615,7 +646,7 @@ func TestDeployBuild(t *testing.T) {
 		for _, tt := range tests {
 			mock_app := database.Application{
 				Name: tt.name,
-				Type: APP_TYPE_NODEJS_CONTAINER,
+				Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 			}	
 
 			want_build_path := getBuildDirPath(cfg, "localfs", mock_app.Name)
@@ -624,7 +655,7 @@ func TestDeployBuild(t *testing.T) {
 			created_at.Scan(time.Now())
 			mock_dp := database.ApplicationDeployment{
 				AppID: mock_app.AppID,
-				Status: DEPLOY_STATUS_INITIATED,
+				Status: shared_deployment.DEPLOY_STATUS_INITIATED,
 				ArtifactsPath: tt.artifact_path,
 				BuildPath: want_build_path,
 				VersionNumber: 1,
@@ -668,7 +699,7 @@ func TestDeployPush(t *testing.T) {
 	cfg.BASE_ARTIFACT_PATH = "/tmp/masmasbro/artifacts"
 	config.SetConfig(cfg)
 
-	port_service := &StubPortAllocatorService{}
+	port_service := &shared_deployment.StubPortAllocatorService{}
 	app_service := &application.StubApplicationService{}
 	docker := &StubDocker{}
 	deployment_service := NewService(
@@ -701,7 +732,7 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_new_status := got_dp.Status
-		want_new_status := -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		want_new_status := -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 		if got_new_status != int32(want_new_status) {
 			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
 		}
@@ -742,7 +773,7 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_new_status := got_dp.Status
-		want_new_status := -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		want_new_status := -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 		if got_new_status != int32(want_new_status) {
 			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
 		}
@@ -837,7 +868,7 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_new_status := got_dp.Status
-		want_new_status := DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		want_new_status := shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 		if got_new_status != int32(want_new_status) {
 			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
 		}

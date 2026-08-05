@@ -16,6 +16,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	shared_deployment "github.com/salmanrf/capybara-cloud/shared/deployment"
 	"github.com/salmanrf/capybara-cloud/shared/docker"
 	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
@@ -24,7 +25,7 @@ type service struct {
 	ctx context.Context
 	docker docker.Docker
 	app_service application.Service
-	port_service PortAllocatorService
+	port_service shared_deployment.PortAllocatorService
 	deployment_repository DeploymentRepository
 	deploy_chan chan DeployRequest
 }	
@@ -40,7 +41,7 @@ func NewService(
 	ctx context.Context,
 	docker_service docker.Docker,
 	app_service application.Service,
-	port_service PortAllocatorService,
+	port_service shared_deployment.PortAllocatorService,
 	deployment_repository DeploymentRepository,
 	deploy_chan chan DeployRequest,
 ) Service {
@@ -72,7 +73,7 @@ func (s *service) Extract(dto DeployRequest) (DeployStepResult, error) {
 		DeploymentDto: &dep,
 		DeploymentError: nil,
 	}
-	dep.Status = -1 * DEPLOY_STATUS_BUILD_EXTRACTED
+	dep.Status = -1 * shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
 
 	cfg := config.GetConfig()
 
@@ -97,7 +98,7 @@ func (s *service) Extract(dto DeployRequest) (DeployStepResult, error) {
 		return res, err
 	}
 
-	res.DeploymentDto.Status = DEPLOY_STATUS_BUILD_EXTRACTED
+	res.DeploymentDto.Status = shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
 
 	return res, nil
 }
@@ -107,7 +108,7 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	
 	dep := dto.DeploymentDto
 	if _, err := os.ReadDir(dep.BuildPath); err != nil {
-		dto.DeploymentDto.Status = -DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		dto.DeploymentDto.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 		res.DeploymentDto = &dto.DeploymentDto
 		res.DeploymentError = errors.New("Unable to locate build directory")
 		return res, res.DeploymentError
@@ -126,7 +127,7 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	dockerfile_template_path := path.Join(wd, "templates", "Dockerfile")
 	template_dockerfile, err := os.OpenFile(dockerfile_template_path, os.O_RDONLY, 0)
 	if err != nil {
-		res.DeploymentDto.Status = -DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		res.DeploymentDto.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 		res.DeploymentError = errors.New("Unable to locate template Dockerfile")
 		return res, res.DeploymentError
 	}
@@ -134,14 +135,14 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	dockerfile_path := path.Join(dep.BuildPath, "Dockerfile")
 	dockerfile, err := os.OpenFile(dockerfile_path, os.O_CREATE | os.O_WRONLY, 0o774)
 	if err != nil {
-		res.DeploymentDto.Status = -DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		res.DeploymentDto.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 		res.DeploymentError = errors.New("Unable to locate build directory")
 		return res, res.DeploymentError
 	}
 
 	_, err = io.Copy(dockerfile, template_dockerfile)
 	if err != nil {
-		res.DeploymentDto.Status = -DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		res.DeploymentDto.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 		res.DeploymentError = errors.New("Unable to copy Dockerfile")
 		return res, res.DeploymentError
 	}
@@ -150,7 +151,7 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 
 	docker, err := exec.LookPath("docker")
 	if err != nil {
-		res.DeploymentDto.Status = -DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		res.DeploymentDto.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 		res.DeploymentError = errors.New("Unable to locate docker executable")
 		return res, res.DeploymentError
 	}
@@ -172,12 +173,12 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	fmt.Printf("Running: %s ...\n", docker_build_cmd.String())
 	err = docker_build_cmd.Run()
 	if err != nil {
-		res.DeploymentDto.Status = -DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		res.DeploymentDto.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 		res.DeploymentError = errors.New("Unable to build docker image")
 		return res, res.DeploymentError
 	}
 
-	res.DeploymentDto.Status = DEPLOY_STATUS_BUILD_IMAGE_BUILT
+	res.DeploymentDto.Status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
 	res.DeploymentDto.ContainerImgName = docker_full_image_reference
 	res.DeploymentDto.ContainerRegistry = cfg.DOCKER_REGISTRY
 
@@ -192,45 +193,20 @@ func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
 	
 	dockerimg, err := s.docker.FindOneImageByName(repotag)
 	if err != nil || dockerimg == nil {
-		new_deployment.Status = -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		new_deployment.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 		return res, errors.New("image_not_found")
 	}
 
 	err = s.docker.Push(repotag)
 	if err != nil {
 		err_msg := fmt.Sprintf("image_push_failed: %s", err.Error())
-		new_deployment.Status = -DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		new_deployment.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 		return res, errors.New(err_msg)
 	}
 
-	new_deployment.Status = DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+	new_deployment.Status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 
 	return res, err
-}
-
-func (s *service) handleDeployRequest(dto DeployRequest) {
-	app := dto.ApplicationDto
-	dep := dto.DeploymentDto
-	cfg := dto.ApplicationConfig
-
-	appDetails := database.FindOneApplicationWithProjectMemberRow{
-		Name: app.Name,
-		Type: app.Type,
-	}
-	containerName := getContainerName(appDetails)
-	
-	host_port, err := s.port_service.GetFreePort()
-	if err != nil {
-		fmt.Println("handleDeployRequest error allocating port", err)
-	}
-	create_ins_params := database.CreateDeploymentInstanceParams{
-		AppID: app.AppID,
-		DeploymentID: dep.AppDpID,
-		ContainerName: containerName,
-		ContainerPort: cfg.Port,
-		HostPort: int32(host_port),
-	}
-	s.deployment_repository.CreateInstance(create_ins_params)
 }
 
 func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle_file multipart.File) (*database.ApplicationDeployment, error) {
@@ -265,7 +241,7 @@ func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *mul
 		VariablesSnapshotJson: app.ApplicationConfig.VariablesJson,
 		VersionNumber: int32(next_version),
 		StorageService: "localfs",
-		Status: DEPLOY_STATUS_INITIATED,
+		Status: shared_deployment.DEPLOY_STATUS_INITIATED,
 	}
 
 	app_deployment, err := s.deployment_repository.Create(create_dp_params)
@@ -389,99 +365,5 @@ func saveDeployArtifacts(
 	} 
 
 	return full_path, nil
-}
-
-func startContainerizedApp(
-	globalcfg config.Config,
-	app database.FindOneApplicationWithProjectMemberRow,
-	appdp database.ApplicationDeployment,
-) error {
-	artifact_path := appdp.ArtifactsPath
-	pathsegs := strings.Split(artifact_path, "/")
-	filename := pathsegs[len(pathsegs) - 1]
-	artifact_dir := strings.Split(artifact_path, filename)[0]
-
-	_, err := os.OpenFile(artifact_path, os.O_RDONLY, 0)
-	if err != nil {
-		fmt.Println("Unable to open sample deployment bundle", err)
-		return err
-	}
-	
-	tar, err := exec.LookPath("tar")
-	if err != nil {
-		fmt.Println("Unable to find 'tar' executable", err)
-		return err
-	}
-
-	cmd := exec.Command(tar, "-xzvf", artifact_path, "-C", artifact_dir)
-	err = cmd.Run()
-	if err != nil {
-		fmt.Println("Unable to find 'tar' executable", err)
-		return err
-	}
-
-	wd, _ := os.Getwd()
-	dockerfileTemplatePath := path.Join(wd, "templates", "Dockerfile") 
-	dockerfileTemplate, err := os.OpenFile(dockerfileTemplatePath, os.O_RDONLY, 0)
-	if err != nil {
-		fmt.Println("Unable to open Dockerfile template", err)
-		return err
-	}
-
-	targetDockerfilePath := path.Join(artifact_dir, "Dockerfile")
-	targetDockerfile, err := os.OpenFile(targetDockerfilePath, os.O_CREATE | os.O_WRONLY, 0o774)
-	if err != nil {
-		fmt.Println("Unable to open Dockerfile copy target", err)
-		return err
-	}
-
-	_, err = io.Copy(targetDockerfile, dockerfileTemplate)
-	if err != nil {
-		fmt.Println("Unable to copy Dockerfile template", err)
-		return err
-	}
-
-	dockerPath, err := exec.LookPath("docker")
-	if err != nil {
-		fmt.Println("Unable to find docker executables: ", err)
-		return err
-	}
-
-	buildLogs := bytes.NewBuffer([]byte{})
-	buildErrs := bytes.NewBuffer([]byte{})
-
-	containerName := getContainerName(app)
-	dockerBuildCtxDir := artifact_dir
-	dockerRegNamespace := globalcfg.DOCKER_REGISTRY
-	dockerRegRepository := utils.Slugify(app.Name)
-	dockerTag := strings.Split(
-		containerName,
-		fmt.Sprintf("%s-%s-", app.Type, dockerRegRepository),
-	)[1]
-	dockerFullTag := fmt.Sprintf("%s/%s:%s", dockerRegNamespace, dockerRegRepository, dockerTag)
-	dockerBuildCmd := exec.Command(dockerPath, "build", "-t", dockerFullTag, dockerBuildCtxDir)
-	dockerBuildCmd.Stdout = buildLogs
-
-	err = dockerBuildCmd.Run()
-	if err != nil {
-		fmt.Println("BUILD LOGS", buildLogs)
-		fmt.Println("BUILD ERRS", buildErrs)
-		fmt.Println("Unable to build container image " + dockerFullTag, err)
-		return err
-	}
-
-	runLogs := bytes.NewBuffer([]byte{})
-	runErrs := bytes.NewBuffer([]byte{})
-	dockerRunCmd := exec.Command(dockerPath, "run", "--name", containerName, "-d", "-p", "8080:3000", dockerFullTag)
-	dockerRunCmd.Stdout = runLogs
-	err = dockerRunCmd.Run()
-	if err != nil {
-		fmt.Println("RUN LOGS", runLogs)
-		fmt.Println("RUN ERRS", runErrs)
-		fmt.Println("Unable to start container " + containerName, err)
-		return err
-	}
-
-	return nil
 }
 

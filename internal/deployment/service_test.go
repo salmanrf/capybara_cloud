@@ -18,6 +18,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/application"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	shared_deployment "github.com/salmanrf/capybara-cloud/shared/deployment"
 	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
 
@@ -39,7 +40,7 @@ func TestNewService(t *testing.T) {
 		cfg.BASE_ARTIFACT_PATH = "/tmp/tests/capybara-artifacts"
 		config.SetConfig(cfg)
 	
-		port_service := &StubPortAllocatorService{}
+		port_service := &shared_deployment.StubPortAllocatorService{}
 		app_service := &application.StubApplicationService{}
 		NewService(
 			ctx,
@@ -71,7 +72,7 @@ func TestNewService(t *testing.T) {
 		cfg.BASE_ARTIFACT_PATH = "/abcd"
 		config.SetConfig(cfg)
 	
-		port_service := &StubPortAllocatorService{}
+		port_service := &shared_deployment.StubPortAllocatorService{}
 		app_service := &application.StubApplicationService{}
 
 		defer func () {
@@ -102,7 +103,7 @@ func TestDeploy(t *testing.T) {
 	cfg.BASE_BUILD_PATH = "/tmp/tests/builds"
 	config.SetConfig(cfg)
 
-	port_service := &StubPortAllocatorService{}
+	port_service := &shared_deployment.StubPortAllocatorService{}
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
@@ -220,7 +221,7 @@ func TestDeploy(t *testing.T) {
 			StorageService: "localfs",
 			VariablesSnapshotJson: mock_app.ApplicationConfig.VariablesJson,
 			VersionNumber: 1,
-			Status: DEPLOY_STATUS_INITIATED,
+			Status: shared_deployment.DEPLOY_STATUS_INITIATED,
 		}
 
 		app_service.Find_one_return = mock_app
@@ -546,7 +547,7 @@ func TestGetContainerImageName(t *testing.T) {
 		t.Run(fmt.Sprintf("should return the full docker image name + tag for '%s'", tt.name), func (t *testing.T) {
 			mock_app := database.Application{
 				Name: tt.name,	
-				Type: APP_TYPE_NODEJS_CONTAINER,
+				Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 			}
 			created_at := pgtype.Timestamp{}
 			created_at.Scan(time.Now())
