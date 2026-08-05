@@ -1,36 +1,31 @@
 package deployment
 
 import (
-	"github.com/salmanrf/capybara-cloud/internal/database"
+	masbro_worker "github.com/salmanrf/capybara-cloud/internal/masbro-worker"
+	shared_deployment "github.com/salmanrf/capybara-cloud/shared/deployment"
 )
 
-type DeployRequest struct {
-	ApplicationDto    database.Application
-	ApplicationConfig database.ApplicationConfig
-	DeploymentDto     database.ApplicationDeployment
-}
+type DeployRequest = shared_deployment.DeployRequest
 
-type DeployStepResult struct {
-	DeploymentDto   *database.ApplicationDeployment
-	DeploymentError error
-}
+type DeployStepResult = shared_deployment.DeployStepResult
 
 type listener struct {
 	in_channel 		 chan DeployRequest
 	out_channel 	 chan DeployStepResult
 	deploy_service Service
+	masbro_service masbro_worker.Service
 }
 
 type Listener interface {
 	Listen()
-	handleExtract(dto DeployRequest, out chan <- DeployStepResult)
 }
 
-func NewListener(in_channel chan DeployRequest, out_channel chan DeployStepResult, deploy_service Service) Listener {
+func NewListener(in_channel chan DeployRequest, out_channel chan DeployStepResult, deploy_service Service, masbro_service masbro_worker.Service) Listener {
 	return &listener{
 		in_channel,
 		out_channel,
 		deploy_service,
+		masbro_service,
 	}
 }
 
@@ -41,12 +36,14 @@ func (l *listener) Listen() {
 			continue
 		}
 		switch in.DeploymentDto.Status {
-		case DEPLOY_STATUS_INITIATED:
+		case shared_deployment.DEPLOY_STATUS_INITIATED:
 			go l.handleExtract(in, l.out_channel)
-		case DEPLOY_STATUS_BUILD_EXTRACTED:
+		case shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED:
 			go l.handleBuild(in, l.out_channel)
-		case DEPLOY_STATUS_BUILD_IMAGE_BUILT:
+		case shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT:
 			go l.handlePush(in, l.out_channel)
+		case shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED:
+			go l.handleStart(in)
 		}
 	}
 }
@@ -64,4 +61,8 @@ func (l *listener) handleBuild(dto DeployRequest, out chan <- DeployStepResult) 
 func (l *listener) handlePush(dto DeployRequest, out chan <- DeployStepResult) {
 	result, _ := l.deploy_service.Push(dto)
 	out <- result
+}
+
+func (l *listener) handleStart(dto DeployRequest) {
+	l.masbro_service.Start(dto)
 }

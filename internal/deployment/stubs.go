@@ -4,6 +4,7 @@ import (
 	"mime/multipart"
 
 	"github.com/salmanrf/capybara-cloud/internal/database"
+	shared_deployment "github.com/salmanrf/capybara-cloud/shared/deployment"
 )
 
 type StubAppDeploymentRepository struct {
@@ -82,43 +83,26 @@ func (s *StubAppDeploymentRepository) UpdateInstanceStatus(params database.Updat
 	return s.update_instance_status_return, s.update_instance_status_error
 }
 
-type StubPortAllocatorService struct {
-	get_free_port_return int
-	get_free_port_error error
-	get_free_port_n_calls int
-}
-
-func (s *StubPortAllocatorService) Clear() {
-	s.get_free_port_return = 0
-	s.get_free_port_error = nil
-	s.get_free_port_n_calls = 0
-}
-
-func (s *StubPortAllocatorService) GetFreePort() (int, error) {
-	s.get_free_port_n_calls += 1
-	return s.get_free_port_return, s.get_free_port_error
-}
-
 type StubService struct {
 	deploy_return           *database.ApplicationDeployment
 	deploy_error            error
 	deploy_n_calls          int
 	deploy_call_args        []deployCallArgs
 
-	extract_return    DeployStepResult
+	extract_return    shared_deployment.DeployStepResult
 	extract_error     error
 	extract_n_calls   int
-	extract_call_args []DeployRequest
+	extract_call_args []shared_deployment.DeployRequest
 
-	build_return    DeployStepResult
+	build_return    shared_deployment.DeployStepResult
 	build_error     error
 	build_n_calls   int
-	build_call_args []DeployRequest
+	build_call_args []shared_deployment.DeployRequest
 
-	push_return    DeployStepResult
+	push_return    shared_deployment.DeployStepResult
 	push_error     error
 	push_n_calls   int
-	push_call_args []DeployRequest
+	push_call_args []shared_deployment.DeployRequest
 }
 
 type deployCallArgs struct {
@@ -134,17 +118,17 @@ func (s *StubService) Clear() {
 	s.deploy_n_calls = 0
 	s.deploy_call_args = nil
 
-	s.extract_return = DeployStepResult{}
+	s.extract_return = shared_deployment.DeployStepResult{}
 	s.extract_error = nil
 	s.extract_n_calls = 0
 	s.extract_call_args = nil
 
-	s.build_return = DeployStepResult{}
+	s.build_return = shared_deployment.DeployStepResult{}
 	s.build_error = nil
 	s.build_n_calls = 0
 	s.build_call_args = nil
 
-	s.push_return = DeployStepResult{}
+	s.push_return = shared_deployment.DeployStepResult{}
 	s.push_error = nil
 	s.push_n_calls = 0
 	s.push_call_args = nil
@@ -161,23 +145,37 @@ func (s *StubService) Deploy(user_id string, app_id string, bundle_file_headers 
 	return s.deploy_return, s.deploy_error
 }
 
-func (s *StubService) Extract(dto DeployRequest) (DeployStepResult, error) {
+func (s *StubService) Extract(dto shared_deployment.DeployRequest) (shared_deployment.DeployStepResult, error) {
 	s.extract_n_calls += 1
 	s.extract_call_args = append(s.extract_call_args, dto)
 
 	return s.extract_return, s.extract_error
 }
 
-func (s *StubService) Build(dto DeployRequest) (DeployStepResult, error) {
+func (s *StubService) Build(dto shared_deployment.DeployRequest) (shared_deployment.DeployStepResult, error) {
 	s.build_n_calls += 1
 	s.build_call_args = append(s.build_call_args, dto)
 
 	return s.build_return, s.build_error
 }
 
-func (s *StubService) Push(dto DeployRequest) (DeployStepResult, error) {
+func (s *StubService) Push(dto shared_deployment.DeployRequest) (shared_deployment.DeployStepResult, error) {
 	s.push_n_calls += 1
 	s.push_call_args = append(s.push_call_args, dto)
 
 	return s.push_return, s.push_error
+}
+
+type StubMasbroService struct {
+	start_return    *database.DeploymentInstance
+	start_error     error
+	start_n_calls   int
+	start_call_args []shared_deployment.DeployRequest
+}
+
+func (s *StubMasbroService) Start(dto shared_deployment.DeployRequest) (*database.DeploymentInstance, error) {
+	s.start_n_calls += 1
+	s.start_call_args = append(s.start_call_args, dto)
+
+	return s.start_return, s.start_error
 }

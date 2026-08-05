@@ -18,6 +18,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
 	config "github.com/salmanrf/capybara-cloud/pkg/utils"
+	shared_deployment "github.com/salmanrf/capybara-cloud/shared/deployment"
 	"github.com/salmanrf/capybara-cloud/shared/docker"
 	"github.com/salmanrf/capybara-cloud/shared/utils"
 )
@@ -79,13 +80,14 @@ func main() {
 	org_service := organization.NewService(ctx, db_conn, queries, user_service)
 	project_service := project.NewService(ctx, db_conn, queries, user_service)
 	application_service := application.NewService(ctx, application_repository, project_service)
-	port_allocator_service := deployment.NewPortAllocatorService()
+	port_allocator_service := shared_deployment.NewPortAllocatorService()
 	docker_service, err := docker.New(
 		docker.DockerConfig{
 			Registry: cfg.DOCKER_REGISTRY,
 			AccessToken: cfg.DOCKER_ACCESS_TOKEN,
 			Username: cfg.DOCKER_USER,
 		},
+		port_allocator_service,
 	)
 	if err != nil {
 		log.Fatal(err)

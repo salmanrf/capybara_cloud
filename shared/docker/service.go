@@ -9,12 +9,25 @@ import (
 
 	"github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/client"
+	"github.com/salmanrf/capybara-cloud/shared/deployment"
 )
 
 type DockerConfig struct {
 	Registry string
+	Namespace string
 	AccessToken string
 	Username string
+}
+
+type DockerRunDto struct {
+	ImageName string
+	ContainerName string
+	ContainerPort int
+	EnvVars map[string]any
+}
+
+type DockerRunResult struct {
+	HostPort int
 }
 
 func (cfg *DockerConfig) Validate() (bool, error) {
@@ -30,18 +43,22 @@ func (cfg *DockerConfig) Validate() (bool, error) {
 }
 
 type Docker interface {
-	FindOneImageByName(name string) (*image.Summary, error)
-	Push(image_name string) error
+	FindOneImageByName(string) (*image.Summary, error)
+	Push(string) error
+	Pull(string) error
+	Run(DockerRunDto) (*DockerRunResult, error)
 }
 
 type docker struct {
 	client *client.Client
 	config *DockerConfig
+	port_allocator deployment.PortAllocatorService
 }
 
-func New(config DockerConfig) (Docker, error) {
+func New(config DockerConfig, port_allocator deployment.PortAllocatorService) (Docker, error) {
 	docker_client, err := client.New(client.FromEnv)
-	return &docker{docker_client, &config}, err
+
+	return &docker{docker_client, &config, port_allocator}, err
 }
 
 func (d *docker) FindOneImageByName(name string) (*image.Summary, error) {
@@ -65,21 +82,33 @@ func (d *docker) FindOneImageByName(name string) (*image.Summary, error) {
 	return nil, nil
 }
 
-func (d *docker) Push(image_name string) error {
-	cfg := d.config
+func (d *docker) login() error {
+	docker, err := exec.LookPath("docker")
+	if err != nil {
+		fmt.Println("Push error: unable to find docker executable", err)
+		return nil
+	}
 	
+	logincmd := exec.Command(docker, "login", "-u", d.config.Username, "-p", d.config.AccessToken)
+	if err := logincmd.Run(); err != nil {
+		fmt.Println("Login error: failed to authenticate", err)
+		return err
+	}
+
+	return nil
+}
+
+func (d *docker) Push(image_name string) error {
 	docker, err := exec.LookPath("docker")
 	if err != nil {
 		fmt.Println("Push error: unable to find docker executable", err)
 		return nil
 	}
 
-	logincmd := exec.Command(docker, "login", "-u", cfg.Username, "-p", cfg.AccessToken)
-	if err := logincmd.Run(); err != nil {
-		fmt.Println("Push login error: failed to authenticate", err)
+	if err := d.login(); err != nil {
 		return err
 	}
-	
+
 	pushcmd := exec.Command(docker, "push", image_name)
 	stdout, _ := pushcmd.StdoutPipe()
 	stderr, _ := pushcmd.StderrPipe()
@@ -91,6 +120,75 @@ func (d *docker) Push(image_name string) error {
 	
 	return nil
 }
+
+func (d *docker) Pull(image_name string) error {
+	docker, err := exec.LookPath("docker")
+	if err != nil {
+		fmt.Println("Push error: unable to find docker executable", err)
+		return nil
+	}
+
+	if err := d.login(); err != nil {
+		return err
+	}
+
+	pushcmd := exec.Command(docker, "pull", image_name)
+	stdout, _ := pushcmd.StdoutPipe()
+	stderr, _ := pushcmd.StderrPipe()
+	logstream(stdout, stderr, "pull out: ", "pull err: ")
+	if err := pushcmd.Run(); err != nil {
+		fmt.Println("Push error: ", err)
+		return err
+	}
+	
+	return nil
+} 
+
+func (d *docker) Run(dto DockerRunDto) (res *DockerRunResult, err error) {
+	docker, err := exec.LookPath("docker")
+	if err != nil {
+		fmt.Println("Push error: unable to find docker executable", err)
+		return res, err
+	}
+
+	if err := d.login(); err != nil {
+		return res, err
+	}
+
+	host_port, _ := d.port_allocator.GetFreePort()
+
+	args := []string{
+		"run",
+		"-d",
+		"-p",
+		fmt.Sprintf("%d:%d", host_port, dto.ContainerPort), 
+		"--name", dto.ContainerName, 
+	}
+	
+	for k, v := range dto.EnvVars {
+		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+	}
+	args = append(args, dto.ImageName)
+
+	run_cmd := exec.Command(
+		docker,
+		args...,
+	)
+
+	stdout, _ := run_cmd.StdoutPipe()
+	stderr, _ := run_cmd.StderrPipe()
+	logstream(stdout, stderr, "run out: ", "run err: ")
+	if err := run_cmd.Run(); err != nil {
+		fmt.Println("Push error: ", err)
+		return res, err
+	}
+
+	res = &DockerRunResult{
+		HostPort: host_port,
+	}
+	
+	return res, err
+} 
 
 func logstream(stdout, stderr io.Reader, outprefix, errprefix string) {
 	errbuf := make([]byte, 1024)
