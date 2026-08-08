@@ -489,6 +489,129 @@ func TestDeploy(t *testing.T) {
 	})
 }
 
+func TestCreateInstance(t *testing.T) {
+	ctx := context.Background()
+
+	deploy_chan := make(chan DeployRequest, 10)
+	
+	deployment_repository := &StubAppDeploymentRepository{}
+	port_service := &shared_deployment.StubPortAllocatorService{}
+	app_service := &application.StubApplicationService{}
+	deployment_service := NewService(
+		ctx,
+		&StubDocker{},
+		app_service,
+		port_service,
+		deployment_repository,
+		deploy_chan,
+	)
+
+	mock_app := database.Application{
+		Name: "testapp",
+		Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
+	}
+	mock_dp := database.ApplicationDeployment{
+		AppID: mock_app.AppID,
+		Status: shared_deployment.DEPLOY_STATUS_INITIATED,
+		ArtifactsPath: "",
+		BuildPath: "",
+		VersionNumber: 1,
+	}
+	mock_app_cfg := database.ApplicationConfig{
+		Port: 3000,
+	}
+
+	deploy_request := DeployRequest{
+		ApplicationDto: mock_app,
+		DeploymentDto: mock_dp,
+		ApplicationConfig: mock_app_cfg,
+	}
+	
+	t.Run("should construct deployment instance from DeployRequest", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+
+		expected_instance := &database.DeploymentInstance{
+			AppID: mock_app.AppID,
+			DeploymentID: mock_dp.AppDpID,
+			ContainerPort: mock_app_cfg.Port,
+		}
+		expected_instance.InstanceID.Scan(uuid.New().String())
+
+		deployment_repository.create_instance_return = expected_instance
+
+		ins, err := deployment_service.createInstance(deploy_request)
+		if err != nil {
+			t.Fatalf("got unexpected error %v, want nil", err)
+		}
+
+		got_instance := *ins
+		want_instance := *expected_instance
+
+		if !reflect.DeepEqual(got_instance, want_instance) {
+			t.Errorf("got instance %v, want %v", got_instance, want_instance)
+		}
+	})
+
+	t.Run("should call repository CreateInstance with params from DeployRequest", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+
+		deployment_repository.create_instance_return = &database.DeploymentInstance{}
+
+		_, err := deployment_service.createInstance(deploy_request)
+		if err != nil {
+			t.Fatalf("got unexpected error %v, want nil", err)
+		}
+
+		got_n_calls := deployment_repository.create_instance_n_calls
+		want_n_calls := 1
+
+		if got_n_calls != want_n_calls {
+			t.Fatalf("got CreateInstance called %d times, want %d", got_n_calls, want_n_calls)
+		}
+
+		got_create_ins_arg := deployment_repository.create_instance_call_args[0]
+
+		if got_create_ins_arg.AppID != mock_app.AppID {
+			t.Errorf("got app id %v, want %v", got_create_ins_arg.AppID, mock_app.AppID)
+		}
+		if got_create_ins_arg.DeploymentID != mock_dp.AppDpID {
+			t.Errorf("got deployment id %v, want %v", got_create_ins_arg.DeploymentID, mock_dp.AppDpID)
+		}
+		if got_create_ins_arg.ContainerPort != mock_app_cfg.Port {
+			t.Errorf("got container port %v, want %v", got_create_ins_arg.ContainerPort, mock_app_cfg.Port)
+		}
+
+		appnameslug := utils.Slugify(mock_app.Name)
+		pattern, _ := regexp.Compile(fmt.Sprintf("%s-%s-\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2}", mock_app.Type, appnameslug))
+		if !pattern.Match([]byte(got_create_ins_arg.ContainerName)) {
+			t.Errorf("got container name %s, want matching %s-%s-<datetime>", got_create_ins_arg.ContainerName, mock_app.Type, appnameslug)
+		}
+	})
+
+	t.Run("should return error from repository CreateInstance", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+
+		deployment_repository.create_instance_error = errors.New("create_instance_failed")
+
+		ins, err := deployment_service.createInstance(deploy_request)
+		if err == nil {
+			t.Fatalf("got nil error, want %v", deployment_repository.create_instance_error)
+		}
+		if ins != nil {
+			t.Errorf("got instance %v, want nil", ins)
+		}
+	})
+}
+
 func TestGetFullArtifactPath(t *testing.T) {
 	config := config.Config{}
 	config.BASE_ARTIFACT_PATH = "/tmp/test_get_full_dir_path"

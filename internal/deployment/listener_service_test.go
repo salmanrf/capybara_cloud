@@ -158,6 +158,8 @@ func TestDeployListener(t *testing.T) {
 		req := deploy_request
 		req.DeploymentDto.Status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 
+		deployment_service.create_instance_return = &database.DeploymentInstance{}
+
 		go listener_service.Listen()
 		in_chan <- req
 

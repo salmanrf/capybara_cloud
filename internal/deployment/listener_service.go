@@ -64,5 +64,9 @@ func (l *listener) handlePush(dto DeployRequest, out chan <- DeployStepResult) {
 }
 
 func (l *listener) handleStart(dto DeployRequest) {
-	l.masbro_service.Start(dto)
+	ins, err := l.deploy_service.createInstance(dto)
+	if err != nil || ins == nil {
+		return
+	}
+	l.masbro_service.Start(dto, *ins)
 }

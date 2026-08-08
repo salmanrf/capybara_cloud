@@ -35,6 +35,7 @@ type Service interface {
 	Extract(dto DeployRequest) (DeployStepResult, error)
 	Build(dto DeployRequest) (DeployStepResult, error)
 	Push(dto DeployRequest) (DeployStepResult, error)
+	createInstance(dto DeployRequest) (*database.DeploymentInstance, error) 
 }
 
 func NewService(
@@ -63,6 +64,96 @@ func NewService(
 		deployment_repository,
 		deploy_chan,
 	}
+}
+
+func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle_file multipart.File) (*database.ApplicationDeployment, error) {
+	config := config.GetConfig()
+	
+	app, err := s.app_service.FindOne(app_id, user_id)
+	if err != nil {
+		return nil, err
+	}
+	if app == nil || !app.ApplicationConfig.AppCfgID.Valid {
+		return nil, errors.New("not_found")
+	}
+
+	artifact_path, err := saveDeployArtifacts(config, *app, bundle_file_headers, bundle_file)
+	if err != nil {
+		return nil, err
+	}
+
+	next_version := int32(1)
+	current_dp, err := s.deployment_repository.FindCurrent(app_id)
+	if err != nil {
+		return nil, err
+	}
+	if current_dp != nil {
+		next_version = current_dp.VersionNumber + 1
+	}
+
+	create_dp_params := database.CreateApplicationDeploymentParams{
+		AppID: app.AppID,
+		ArtifactsPath: artifact_path,
+		BuildPath: "abcd",
+		VariablesSnapshotJson: app.ApplicationConfig.VariablesJson,
+		VersionNumber: int32(next_version),
+		StorageService: "localfs",
+		Status: shared_deployment.DEPLOY_STATUS_INITIATED,
+	}
+
+	app_deployment, err := s.deployment_repository.Create(create_dp_params)
+	if err != nil {
+		return nil, err
+	}
+
+	app_dto := database.Application{
+		AppID:     app.AppID,
+		ProjectID: app.PmProjectID,
+		Type:      app.Type,
+		Name:      app.Name,
+		CreatedAt: app.CreatedAt,
+		UpdatedAt: app.UpdatedAt,
+	}
+
+	app_config_dto := database.ApplicationConfig{
+		AppCfgID:      app.ApplicationConfig.AppCfgID,
+		AppID:         app.AppID,
+		VariablesJson: app.ApplicationConfig.VariablesJson,
+		CreatedAt:     app.ApplicationConfig.CreatedAt,
+		UpdatedAt:     app.ApplicationConfig.UpdatedAt,
+	}
+
+	deploy_req := DeployRequest{
+		ApplicationDto:    app_dto,
+		ApplicationConfig: app_config_dto,
+		DeploymentDto:     *app_deployment,
+	}
+
+	s.deploy_chan <- deploy_req
+
+	return app_deployment, nil
+}
+
+func (s *service) createInstance(dto DeployRequest) (*database.DeploymentInstance, error) {
+	app := database.FindOneApplicationWithProjectMemberRow{
+		Type: dto.ApplicationDto.Type,
+		Name: dto.ApplicationDto.Name,
+	}
+	container_name := getContainerName(app)
+
+	create_params := database.CreateDeploymentInstanceParams{
+		AppID: dto.ApplicationDto.AppID,
+		DeploymentID: dto.DeploymentDto.AppDpID,
+		ContainerName: container_name,
+		ContainerPort: dto.ApplicationConfig.Port,
+	}
+
+	instance, err := s.deployment_repository.CreateInstance(create_params)
+	if err != nil {
+		return nil, err
+	}
+
+	return instance, nil
 }
 
 func (s *service) Extract(dto DeployRequest) (DeployStepResult, error) {
@@ -207,74 +298,6 @@ func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
 	new_deployment.Status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
 
 	return res, err
-}
-
-func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle_file multipart.File) (*database.ApplicationDeployment, error) {
-	config := config.GetConfig()
-	
-	app, err := s.app_service.FindOne(app_id, user_id)
-	if err != nil {
-		return nil, err
-	}
-	if app == nil || !app.ApplicationConfig.AppCfgID.Valid {
-		return nil, errors.New("not_found")
-	}
-
-	artifact_path, err := saveDeployArtifacts(config, *app, bundle_file_headers, bundle_file)
-	if err != nil {
-		return nil, err
-	}
-
-	next_version := int32(1)
-	current_dp, err := s.deployment_repository.FindCurrent(app_id)
-	if err != nil {
-		return nil, err
-	}
-	if current_dp != nil {
-		next_version = current_dp.VersionNumber + 1
-	}
-
-	create_dp_params := database.CreateApplicationDeploymentParams{
-		AppID: app.AppID,
-		ArtifactsPath: artifact_path,
-		BuildPath: "abcd",
-		VariablesSnapshotJson: app.ApplicationConfig.VariablesJson,
-		VersionNumber: int32(next_version),
-		StorageService: "localfs",
-		Status: shared_deployment.DEPLOY_STATUS_INITIATED,
-	}
-
-	app_deployment, err := s.deployment_repository.Create(create_dp_params)
-	if err != nil {
-		return nil, err
-	}
-
-	app_dto := database.Application{
-		AppID:     app.AppID,
-		ProjectID: app.PmProjectID,
-		Type:      app.Type,
-		Name:      app.Name,
-		CreatedAt: app.CreatedAt,
-		UpdatedAt: app.UpdatedAt,
-	}
-
-	app_config_dto := database.ApplicationConfig{
-		AppCfgID:      app.ApplicationConfig.AppCfgID,
-		AppID:         app.AppID,
-		VariablesJson: app.ApplicationConfig.VariablesJson,
-		CreatedAt:     app.ApplicationConfig.CreatedAt,
-		UpdatedAt:     app.ApplicationConfig.UpdatedAt,
-	}
-
-	deploy_req := DeployRequest{
-		ApplicationDto:    app_dto,
-		ApplicationConfig: app_config_dto,
-		DeploymentDto:     *app_deployment,
-	}
-
-	s.deploy_chan <- deploy_req
-
-	return app_deployment, nil
 }
 
 func getContainerImageName(app database.Application, dep database.ApplicationDeployment) string {
