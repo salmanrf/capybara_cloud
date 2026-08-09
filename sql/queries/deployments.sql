@@ -45,3 +45,22 @@ WHERE
   instance_id = $1
 RETURNING 
   instance_id, status;
+
+-- name: UpdateDeploymentInstance :one
+INSERT INTO "deployment_instances" (
+  instance_id,
+  app_id,
+  deployment_id,
+  container_name,
+  host_port,
+  container_port
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (instance_id)
+DO UPDATE SET 
+  app_id = $2,
+  deployment_id = $3,
+  container_name = $4,
+  host_port = $5,
+  container_port = $6
+RETURNING *;

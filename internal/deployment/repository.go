@@ -18,6 +18,7 @@ type DeploymentRepository interface {
 	Create(database.CreateApplicationDeploymentParams) (*database.ApplicationDeployment, error)
 	CreateInstance(database.CreateDeploymentInstanceParams) (*database.DeploymentInstance, error)
 	UpdateStatus(database.UpdateDeploymentStatusParams) (*database.UpdateDeploymentStatusRow, error)
+	UpdateInstance(database.UpdateDeploymentInstanceParams) (*database.DeploymentInstance, error)
 	UpdateInstanceStatus(database.UpdateDeploymentInstanceStatusParams) (*database.UpdateDeploymentInstanceStatusRow, error)
 	FindCurrent(string) (*database.ApplicationDeployment, error)
 }
@@ -40,6 +41,11 @@ func (r *deployment_repository) CreateInstance(params database.CreateDeploymentI
 
 func (r *deployment_repository) UpdateStatus(params database.UpdateDeploymentStatusParams) (*database.UpdateDeploymentStatusRow, error) {
 	row, err := r.queries.UpdateDeploymentStatus(r.ctx, params)
+	return &row, err
+}
+
+func (r *deployment_repository) UpdateInstance(params database.UpdateDeploymentInstanceParams) (*database.DeploymentInstance, error) {
+	row, err := r.queries.UpdateDeploymentInstance(r.ctx, params)
 	return &row, err
 }
 

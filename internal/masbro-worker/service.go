@@ -1,9 +1,11 @@
 package masbro_worker
 
 import (
+	"encoding/json"
+
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/shared/deployment"
-	"github.com/salmanrf/capybara-cloud/shared/docker"
+	docker "github.com/salmanrf/capybara-cloud/shared/docker"
 )
 
 type service struct {
@@ -11,18 +13,35 @@ type service struct {
 }
 
 type Service interface {
-	Start(dto shared_deployment.DeployRequest) (*database.DeploymentInstance, error)
+	Start(dto shared_deployment.DeployRequest, instance database.DeploymentInstance) (database.DeploymentInstance, error)
 }
 
 func New(d docker.Docker) Service {
 	return &service{d}
 }
 
-func (s *service) Start(dto shared_deployment.DeployRequest) (res *database.DeploymentInstance, err error) {
-	err = s.docker.Pull(dto.DeploymentDto.ContainerImgName)
-	if err != nil {
-		return nil, err
+func (s *service) Start(dto shared_deployment.DeployRequest, instance database.DeploymentInstance) (database.DeploymentInstance, error) {
+	dep := dto.DeploymentDto
+	cfg := dto.ApplicationConfig
+
+	var env_map map[string]any
+	err := json.Unmarshal(cfg.VariablesJson, &env_map); if err != nil {
+		return database.DeploymentInstance{}, err
 	}
 
-	return nil, nil
+	run_dto := docker.DockerRunDto{
+		ImageName: dep.ContainerImgName,
+		ContainerPort: int(instance.ContainerPort),
+		ContainerName: instance.ContainerName,
+		EnvVars: env_map,
+	}
+
+	res, err := s.docker.Run(run_dto)
+	if err != nil {
+		return database.DeploymentInstance{}, err
+	}
+
+	instance.HostPort = int32(res.HostPort)
+
+	return instance, nil
 }
