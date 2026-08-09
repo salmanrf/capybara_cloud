@@ -43,7 +43,7 @@ func (l *listener) Listen() {
 		case shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT:
 			go l.handlePush(in, l.out_channel)
 		case shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED:
-			go l.handleStart(in)
+			go l.handleStart(in, l.out_channel)
 		}
 	}
 }
@@ -63,10 +63,22 @@ func (l *listener) handlePush(dto DeployRequest, out chan <- DeployStepResult) {
 	out <- result
 }
 
-func (l *listener) handleStart(dto DeployRequest) {
+func (l *listener) handleStart(dto DeployRequest, out chan <- DeployStepResult) {
 	ins, err := l.deploy_service.createInstance(dto)
 	if err != nil || ins == nil {
 		return
 	}
+
 	l.masbro_service.Start(dto, *ins)
+	l.deploy_service.updateInstance(ins)
+
+	dep := &dto.DeploymentDto
+	dep.Status = shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED
+	
+	res := shared_deployment.DeployStepResult{
+		DeploymentDto: dep,
+		DeploymentError: nil,
+	}
+	
+	out <- res
 }

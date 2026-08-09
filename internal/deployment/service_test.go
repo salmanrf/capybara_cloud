@@ -612,6 +612,115 @@ func TestCreateInstance(t *testing.T) {
 	})
 }
 
+func TestUpdateInstance(t *testing.T) {
+	ctx := context.Background()
+
+	deploy_chan := make(chan DeployRequest, 10)
+
+	deployment_repository := &StubAppDeploymentRepository{}
+	port_service := &shared_deployment.StubPortAllocatorService{}
+	app_service := &application.StubApplicationService{}
+	deployment_service := NewService(
+		ctx,
+		&StubDocker{},
+		app_service,
+		port_service,
+		deployment_repository,
+		deploy_chan,
+	)
+
+	mock_instance := &database.DeploymentInstance{
+		ContainerName: "container-nodejs-testapp-2026-08-09-10-10-10",
+		HostPort: 42690,
+		ContainerPort: 3000,
+	}
+	mock_instance.InstanceID.Scan(uuid.New().String())
+	mock_instance.AppID.Scan(mock_app_id)
+	mock_instance.DeploymentID.Scan(uuid.New().String())
+
+	t.Run("should call repository UpdateInstance with params from the instance", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+
+		deployment_repository.update_instance_return = &database.DeploymentInstance{}
+
+		_, err := deployment_service.updateInstance(mock_instance)
+		if err != nil {
+			t.Fatalf("got unexpected error %v, want nil", err)
+		}
+
+		got_n_calls := deployment_repository.update_instance_n_calls
+		want_n_calls := 1
+
+		if got_n_calls != want_n_calls {
+			t.Fatalf("got UpdateInstance called %d times, want %d", got_n_calls, want_n_calls)
+		}
+
+		got_update_ins_arg := deployment_repository.update_instance_call_args[0]
+		want_update_ins_arg := database.UpdateDeploymentInstanceParams{
+			InstanceID: mock_instance.InstanceID,
+			AppID: mock_instance.AppID,
+			DeploymentID: mock_instance.DeploymentID,
+			ContainerName: mock_instance.ContainerName,
+			HostPort: mock_instance.HostPort,
+			ContainerPort: mock_instance.ContainerPort,
+		}
+
+		if !reflect.DeepEqual(got_update_ins_arg, want_update_ins_arg) {
+			t.Errorf("got update instance params %v, want %v", got_update_ins_arg, want_update_ins_arg)
+		}
+	})
+
+	t.Run("should return the updated instance from repository UpdateInstance", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+
+		expected_instance := &database.DeploymentInstance{
+			InstanceID: mock_instance.InstanceID,
+			AppID: mock_instance.AppID,
+			DeploymentID: mock_instance.DeploymentID,
+			ContainerName: mock_instance.ContainerName,
+			HostPort: mock_instance.HostPort,
+			ContainerPort: mock_instance.ContainerPort,
+		}
+
+		deployment_repository.update_instance_return = expected_instance
+
+		ins, err := deployment_service.updateInstance(mock_instance)
+		if err != nil {
+			t.Fatalf("got unexpected error %v, want nil", err)
+		}
+
+		got_instance := *ins
+		want_instance := *expected_instance
+
+		if !reflect.DeepEqual(got_instance, want_instance) {
+			t.Errorf("got instance %v, want %v", got_instance, want_instance)
+		}
+	})
+
+	t.Run("should return error from repository UpdateInstance", func (t *testing.T) {
+		defer func () {
+			app_service.Clear()
+			deployment_repository.Clear()
+		}()
+
+		deployment_repository.update_instance_error = errors.New("update_instance_failed")
+
+		ins, err := deployment_service.updateInstance(mock_instance)
+		if err == nil {
+			t.Fatalf("got nil error, want %v", deployment_repository.update_instance_error)
+		}
+		if ins != nil {
+			t.Errorf("got instance %v, want nil", ins)
+		}
+	})
+}
+
 func TestGetFullArtifactPath(t *testing.T) {
 	config := config.Config{}
 	config.BASE_ARTIFACT_PATH = "/tmp/test_get_full_dir_path"

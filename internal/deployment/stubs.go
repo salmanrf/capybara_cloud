@@ -28,6 +28,10 @@ type StubAppDeploymentRepository struct {
 	update_instance_status_error error
 	update_instance_status_n_calls int
 	update_instance_status_call_args []database.UpdateDeploymentInstanceStatusParams
+	update_instance_return *database.DeploymentInstance
+	update_instance_error error
+	update_instance_n_calls int
+	update_instance_call_args []database.UpdateDeploymentInstanceParams
 }
 
 func (s *StubAppDeploymentRepository) Clear() {
@@ -51,6 +55,10 @@ func (s *StubAppDeploymentRepository) Clear() {
 	s.update_instance_status_call_args = nil
 	s.update_instance_status_n_calls = 0
 	s.update_instance_status_error = nil
+	s.update_instance_return = nil
+	s.update_instance_error = nil
+	s.update_instance_n_calls = 0
+	s.update_instance_call_args = nil
 }
 
 func (s *StubAppDeploymentRepository) Create(params database.CreateApplicationDeploymentParams) (*database.ApplicationDeployment, error) {
@@ -75,6 +83,12 @@ func (s *StubAppDeploymentRepository) UpdateStatus(params database.UpdateDeploym
 	s.update_status_n_calls += 1
 	s.update_status_call_args = append(s.update_status_call_args, params)
 	return s.update_status_return, s.update_status_error
+}
+
+func (s *StubAppDeploymentRepository) UpdateInstance(params database.UpdateDeploymentInstanceParams) (*database.DeploymentInstance, error) {
+	s.update_instance_n_calls += 1
+	s.update_instance_call_args = append(s.update_instance_call_args, params)
+	return s.update_instance_return, s.update_instance_error
 }
 
 func (s *StubAppDeploymentRepository) UpdateInstanceStatus(params database.UpdateDeploymentInstanceStatusParams) (*database.UpdateDeploymentInstanceStatusRow, error) {
@@ -108,6 +122,11 @@ type StubService struct {
 	create_instance_error     error
 	create_instance_n_calls   int
 	create_instance_call_args []shared_deployment.DeployRequest
+
+	update_instance_return    *database.DeploymentInstance
+	update_instance_error     error
+	update_instance_n_calls   int
+	update_instance_call_args []*database.DeploymentInstance
 }
 
 type deployCallArgs struct {
@@ -142,6 +161,11 @@ func (s *StubService) Clear() {
 	s.create_instance_error = nil
 	s.create_instance_n_calls = 0
 	s.create_instance_call_args = nil
+
+	s.update_instance_return = nil
+	s.update_instance_error = nil
+	s.update_instance_n_calls = 0
+	s.update_instance_call_args = nil
 }
 
 func (s *StubService) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle multipart.File) (*database.ApplicationDeployment, error) {
@@ -160,6 +184,13 @@ func (s *StubService) createInstance(dto shared_deployment.DeployRequest) (*data
 	s.create_instance_call_args = append(s.create_instance_call_args, dto)
 
 	return s.create_instance_return, s.create_instance_error
+}
+
+func (s *StubService) updateInstance(instance *database.DeploymentInstance) (*database.DeploymentInstance, error) {
+	s.update_instance_n_calls += 1
+	s.update_instance_call_args = append(s.update_instance_call_args, instance)
+
+	return s.update_instance_return, s.update_instance_error
 }
 
 func (s *StubService) Extract(dto shared_deployment.DeployRequest) (shared_deployment.DeployStepResult, error) {

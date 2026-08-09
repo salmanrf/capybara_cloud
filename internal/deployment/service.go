@@ -36,6 +36,7 @@ type Service interface {
 	Build(dto DeployRequest) (DeployStepResult, error)
 	Push(dto DeployRequest) (DeployStepResult, error)
 	createInstance(dto DeployRequest) (*database.DeploymentInstance, error) 
+	updateInstance(*database.DeploymentInstance) (*database.DeploymentInstance, error) 
 }
 
 func NewService(
@@ -149,6 +150,24 @@ func (s *service) createInstance(dto DeployRequest) (*database.DeploymentInstanc
 	}
 
 	instance, err := s.deployment_repository.CreateInstance(create_params)
+	if err != nil {
+		return nil, err
+	}
+
+	return instance, nil
+}
+
+func (s *service) updateInstance(ins *database.DeploymentInstance) (*database.DeploymentInstance, error) {
+	update_params := database.UpdateDeploymentInstanceParams{
+		InstanceID: ins.InstanceID,
+		AppID: ins.AppID,
+		DeploymentID: ins.DeploymentID,
+		ContainerName: ins.ContainerName,
+		HostPort: ins.HostPort,
+		ContainerPort: ins.ContainerPort,
+	}
+
+	instance, err := s.deployment_repository.UpdateInstance(update_params)
 	if err != nil {
 		return nil, err
 	}
