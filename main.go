@@ -14,6 +14,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/internal/auth"
 	"github.com/salmanrf/capybara-cloud/internal/database"
 	"github.com/salmanrf/capybara-cloud/internal/deployment"
+	masbro_worker "github.com/salmanrf/capybara-cloud/internal/masbro-worker"
 	"github.com/salmanrf/capybara-cloud/internal/organization"
 	"github.com/salmanrf/capybara-cloud/internal/project"
 	"github.com/salmanrf/capybara-cloud/internal/user"
@@ -92,7 +93,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	deployment_service := deployment.NewService(ctx, docker_service, application_service, port_allocator_service, deployment_repository, deploy_chan)
+	masbro_service := masbro_worker.New(docker_service)
+	deployment_service := deployment.NewService(
+		ctx, 
+		docker_service, 
+		application_service, 
+		masbro_service,
+		port_allocator_service, 
+		deployment_repository, 
+		deploy_chan,
+	)
 	jwt_utils := utils.NewJWTUtils(cfg.AUTH_JWT_SECRET, cfg.AUTH_JWT_ISSUER, []string{cfg.AUTH_JWT_AUDIENCE})
 
 	api_server := api.NewAPIServer(

@@ -11,6 +11,13 @@ type DeployRequest struct {
 }
 
 type DeployStepResult struct {
-	DeploymentDto   *database.ApplicationDeployment
-	DeploymentError error
+	ApplicationDto    database.Application
+	ApplicationConfig database.ApplicationConfig
+	DeploymentDto     database.ApplicationDeployment
+	DeploymentError   error
+}
+
+type DeployRunResult struct {
+	Instance *database.DeploymentInstance
+	Error error
 }

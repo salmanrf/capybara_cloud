@@ -37,6 +37,7 @@ func TestDeployBuild(t *testing.T) {
 		ctx,
 		&StubDocker{},
 		app_service,
+		&StubMasbroService{},
 		port_service,
 		deployment_repository,
 		make(chan DeployRequest, 1),
@@ -243,7 +244,7 @@ func TestDeployBuild(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				deploy_request.DeploymentDto = *res.DeploymentDto
+				deploy_request.DeploymentDto = res.DeploymentDto
 
 				res, err = deployment_service.Build(deploy_request)
 				if err != nil {
@@ -287,10 +288,6 @@ func TestDeployBuild(t *testing.T) {
 					}
 				}(found)
 
-				got_dp := res.DeploymentDto
-				if got_dp == nil {
-					t.Fatalf("got deployment result %v, want non-nil", got_dp)
-				}
 
 				got_new_status := res.DeploymentDto.Status
 				want_new_status := shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT

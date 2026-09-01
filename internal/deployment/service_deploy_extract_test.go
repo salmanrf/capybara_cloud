@@ -26,6 +26,7 @@ func TestDeployExtract(t *testing.T) {
 		ctx,
 		&StubDocker{},
 		app_service,
+		&StubMasbroService{},
 		port_service,
 		deployment_repository,
 		make(chan DeployRequest, 1),

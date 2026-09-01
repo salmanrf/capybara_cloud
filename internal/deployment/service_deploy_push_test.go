@@ -31,6 +31,7 @@ func TestDeployPush(t *testing.T) {
 		ctx,
 		docker,
 		app_service,
+		&StubMasbroService{},
 		port_service,
 		deployment_repository,
 		make(chan DeployRequest, 1),
@@ -52,9 +53,6 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_dp := res.DeploymentDto
-		if got_dp == nil {
-			t.Errorf("got new deployment nil, want non-nil")
-		}
 
 		got_new_status := got_dp.Status
 		want_new_status := -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
@@ -93,9 +91,6 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_dp := res.DeploymentDto
-		if got_dp == nil {
-			t.Errorf("got new deployment nil, want non-nil")
-		}
 
 		got_new_status := got_dp.Status
 		want_new_status := -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
@@ -108,7 +103,7 @@ func TestDeployPush(t *testing.T) {
 		cfg := config.GetConfig()
 		cfg.DOCKER_REGISTRY = "docker.io/test"
 		config.SetConfig(cfg)
-		
+
 		mock_image_summary := &image.Summary{
 			ID: "abcd",
 			RepoTags: []string{"mrfreshgallery-backend-123"},
@@ -188,9 +183,6 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_dp := res.DeploymentDto
-		if got_dp == nil {
-			t.Error("got updated deployment nil, want non-nil")
-		}
 
 		got_new_status := got_dp.Status
 		want_new_status := shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
