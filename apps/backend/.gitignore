@@ -1,0 +1,2 @@
+.env*
+packages/shared-go/database
