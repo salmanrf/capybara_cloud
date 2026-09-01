@@ -1,15 +1,18 @@
 package deployment
 
 import (
+	"context"
+	"fmt"
+
 	masbro_worker "github.com/salmanrf/capybara-cloud/internal/masbro-worker"
 	shared_deployment "github.com/salmanrf/capybara-cloud/shared/deployment"
 )
 
 type DeployRequest = shared_deployment.DeployRequest
-
 type DeployStepResult = shared_deployment.DeployStepResult
 
 type listener struct {
+	ctx 					 context.Context
 	in_channel 		 chan DeployRequest
 	out_channel 	 chan DeployStepResult
 	deploy_service Service
@@ -20,8 +23,9 @@ type Listener interface {
 	Listen()
 }
 
-func NewListener(in_channel chan DeployRequest, out_channel chan DeployStepResult, deploy_service Service, masbro_service masbro_worker.Service) Listener {
+func NewListener(ctx context.Context, in_channel chan DeployRequest, out_channel chan DeployStepResult, deploy_service Service, masbro_service masbro_worker.Service) Listener {
 	return &listener{
+		ctx,
 		in_channel,
 		out_channel,
 		deploy_service,
@@ -30,11 +34,21 @@ func NewListener(in_channel chan DeployRequest, out_channel chan DeployStepResul
 }
 
 func (l *listener) Listen() {
+	go l.listenResult()
+
 	for {
-		in, ok := <- l.in_channel
-		if !ok {
-			continue
+		var in DeployRequest
+		var ok bool
+		
+		select {
+		case <- l.ctx.Done():
+			return
+		case in, ok = <- l.in_channel:
+			if !ok {
+				continue
+			}
 		}
+		
 		switch in.DeploymentDto.Status {
 		case shared_deployment.DEPLOY_STATUS_INITIATED:
 			go l.handleExtract(in, l.out_channel)
@@ -48,6 +62,66 @@ func (l *listener) Listen() {
 	}
 }
 
+func (l *listener) listenResult() {
+	for {
+		var in DeployStepResult
+		var ok bool
+		
+		select {
+		case <- l.ctx.Done():
+			return
+		case in, ok = <- l.out_channel:
+			if !ok {
+				continue
+			}
+		}
+
+		dep := in.DeploymentDto
+
+		new_status := in.DeploymentDto.Status
+		switch in.DeploymentDto.Status {
+		case shared_deployment.DEPLOY_STATUS_INITIATED:
+			new_status = shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
+		case shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED:
+			new_status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
+		case shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT:
+			new_status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		case shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED:
+			new_status = shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED
+		case shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED:
+			continue
+		}
+
+		step_err := in.DeploymentError
+		if step_err != nil {
+			new_status = -new_status
+		}
+		dep.Status = new_status
+
+		updated, err := l.deploy_service.update(dep)
+		if updated == nil|| err != nil {
+			fmt.Println("Error updating deployment", err)
+			continue
+		}
+		if step_err != nil {
+			continue
+		}
+		if updated.Status == shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED {
+			continue
+		}
+
+		dep = *updated
+		req := DeployRequest{
+			ApplicationDto: in.ApplicationDto,
+			DeploymentDto: dep,
+			ApplicationConfig: in.ApplicationConfig,
+		}
+
+		l.in_channel <- req
+	}
+}
+
+// TODO: Refactor the semantic so each step progresses the status by one step
 func (l *listener) handleExtract(dto DeployRequest, out chan <- DeployStepResult) {
 	result, _ := l.deploy_service.Extract(dto)
 	out <- result
@@ -64,21 +138,6 @@ func (l *listener) handlePush(dto DeployRequest, out chan <- DeployStepResult) {
 }
 
 func (l *listener) handleStart(dto DeployRequest, out chan <- DeployStepResult) {
-	ins, err := l.deploy_service.createInstance(dto)
-	if err != nil || ins == nil {
-		return
-	}
-
-	l.masbro_service.Start(dto, *ins)
-	l.deploy_service.updateInstance(ins)
-
-	dep := &dto.DeploymentDto
-	dep.Status = shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED
-	
-	res := shared_deployment.DeployStepResult{
-		DeploymentDto: dep,
-		DeploymentError: nil,
-	}
-	
-	out <- res
+	result, _ := l.deploy_service.Start(dto)
+	out <- result
 }

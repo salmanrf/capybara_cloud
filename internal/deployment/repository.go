@@ -17,7 +17,8 @@ type deployment_repository struct {
 type DeploymentRepository interface {
 	Create(database.CreateApplicationDeploymentParams) (*database.ApplicationDeployment, error)
 	CreateInstance(database.CreateDeploymentInstanceParams) (*database.DeploymentInstance, error)
-	UpdateStatus(database.UpdateDeploymentStatusParams) (*database.UpdateDeploymentStatusRow, error)
+	UpdateStatus(database.UpdateDeploymentStatusParams) (*database.ApplicationDeployment, error)
+	Update(database.UpdateDeploymentParams) (*database.ApplicationDeployment, error)
 	UpdateInstance(database.UpdateDeploymentInstanceParams) (*database.DeploymentInstance, error)
 	UpdateInstanceStatus(database.UpdateDeploymentInstanceStatusParams) (*database.UpdateDeploymentInstanceStatusRow, error)
 	FindCurrent(string) (*database.ApplicationDeployment, error)
@@ -39,8 +40,13 @@ func (r *deployment_repository) CreateInstance(params database.CreateDeploymentI
 	return &row, err
 }
 
-func (r *deployment_repository) UpdateStatus(params database.UpdateDeploymentStatusParams) (*database.UpdateDeploymentStatusRow, error) {
+func (r *deployment_repository) UpdateStatus(params database.UpdateDeploymentStatusParams) (*database.ApplicationDeployment, error) {
 	row, err := r.queries.UpdateDeploymentStatus(r.ctx, params)
+	return &row, err
+}
+
+func (r *deployment_repository) Update(params database.UpdateDeploymentParams) (*database.ApplicationDeployment, error) {
+	row, err := r.queries.UpdateDeployment(r.ctx, params)
 	return &row, err
 }
 

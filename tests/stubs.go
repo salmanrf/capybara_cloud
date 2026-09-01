@@ -231,6 +231,8 @@ func (s *StubApplicationService) FindOneConfig(app_id string, user_id string) (*
 }
 
 type StubDeploymentService struct {
+	deployment.Service
+
 	deploy_n_calls int
 	deploy_return *database.ApplicationDeployment
 	deploy_err error
@@ -294,10 +296,7 @@ func (s *StubDeploymentService) Extract(dto deployment.DeployRequest) (deploymen
 	s.extract_call_args = append(s.extract_call_args, dto)
 
 	result := s.extract_return
-	if result.DeploymentDto == nil {
-		dep := dto.DeploymentDto
-		result.DeploymentDto = &dep
-	}
+	result.DeploymentDto = dto.DeploymentDto
 
 	return result, s.extract_err
 }
@@ -307,10 +306,7 @@ func (s *StubDeploymentService) Build(dto deployment.DeployRequest) (deployment.
 	s.build_call_args = append(s.build_call_args, dto)
 
 	result := s.build_return
-	if result.DeploymentDto == nil {
-		dep := dto.DeploymentDto
-		result.DeploymentDto = &dep
-	}
+	result.DeploymentDto = dto.DeploymentDto
 
 	return result, s.build_err
 }
@@ -320,10 +316,7 @@ func (s *StubDeploymentService) Push(dto deployment.DeployRequest) (deployment.D
 	s.push_call_args = append(s.push_call_args, dto)
 
 	result := s.push_return
-	if result.DeploymentDto == nil {
-		dep := dto.DeploymentDto
-		result.DeploymentDto = &dep
-	}
+	result.DeploymentDto = dto.DeploymentDto
 
 	return result, s.push_err
 }
