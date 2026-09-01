@@ -9,10 +9,15 @@ Capybara Cloud is an open source, self-hosted, "Bring your own cloud", AI-assist
 
 # Project Structure
 
-The project started as a monolithic app, with some new modules gradually migrated into their own
+The project started as a monorepo app, with some new modules gradually migrated into their own
 microservices.
 
-To keep everything in one place, the project is distributed in a monorepo.
+To keep everything in one place, the project is distributed in a monorepo, using basic nx-monorepo.
+
+Monorepo Structure:
+
+- `apps/` -> Deployable applications (frontends, backends, CLIs)
+- `packages/` -> Shared libraries consumed by apps or other packages
 
 The standard structure for each microservice is as follows:
 
