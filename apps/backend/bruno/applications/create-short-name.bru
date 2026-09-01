@@ -1,0 +1,19 @@
+meta {
+  name: create app - name too short (400)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/applications
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "project_id": "{{project_id}}",
+    "type": "container_nodejs",
+    "name": "ab"
+  }
+}

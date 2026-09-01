@@ -1,0 +1,17 @@
+meta {
+  name: update org - missing id (404)
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/organizations
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "whatever"
+  }
+}

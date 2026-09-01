@@ -1,0 +1,17 @@
+meta {
+  name: update project - success
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/projects/{{project_id}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "my-renamed-project"
+  }
+}

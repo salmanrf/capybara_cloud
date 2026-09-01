@@ -1,0 +1,25 @@
+meta {
+  name: create app - success (saves app_id)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/applications
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "project_id": "{{project_id}}",
+    "type": "container_nodejs",
+    "name": "my-test-app"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.data && res.body.data.app_id) {
+    bru.setEnvVar("app_id", res.body.data.app_id);
+  }
+}

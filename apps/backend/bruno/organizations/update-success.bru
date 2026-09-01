@@ -1,0 +1,17 @@
+meta {
+  name: update org - success
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/organizations/{{org_id}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "my-renamed-org"
+  }
+}

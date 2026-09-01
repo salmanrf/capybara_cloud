@@ -1,0 +1,15 @@
+meta {
+  name: create deployment - missing bundle field (422)
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/applications/{{app_id}}/deployments
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  not_bundle: hello
+}

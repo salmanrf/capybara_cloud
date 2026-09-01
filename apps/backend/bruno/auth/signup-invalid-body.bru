@@ -1,0 +1,18 @@
+meta {
+  name: signup - invalid body (400)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/auth/signup
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "not-an-email",
+    "password": ""
+  }
+}

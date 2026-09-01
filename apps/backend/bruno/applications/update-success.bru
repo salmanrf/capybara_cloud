@@ -1,0 +1,17 @@
+meta {
+  name: update app - success
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/applications/{{app_id}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "my-renamed-app"
+  }
+}

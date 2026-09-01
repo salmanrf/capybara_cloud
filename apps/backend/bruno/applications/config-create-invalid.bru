@@ -1,0 +1,18 @@
+meta {
+  name: create app config - invalid port (400)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/applications/{{app_id}}/configs
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "port": -1,
+    "variables": {}
+  }
+}
