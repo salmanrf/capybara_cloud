@@ -1,0 +1,11 @@
+meta {
+  name: delete org - success (204)
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{org_id}}
+  body: none
+  auth: none
+}

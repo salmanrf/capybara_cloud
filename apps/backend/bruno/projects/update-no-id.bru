@@ -1,0 +1,17 @@
+meta {
+  name: update project - missing id (404)
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/projects
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "whatever"
+  }
+}

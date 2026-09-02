@@ -1,0 +1,20 @@
+meta {
+  name: signup - duplicate user (400)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/auth/signup
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{email}}",
+    "password": "{{password}}",
+    "username": "testuser",
+    "full_name": "Test User"
+  }
+}

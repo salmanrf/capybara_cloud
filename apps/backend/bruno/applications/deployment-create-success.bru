@@ -1,0 +1,15 @@
+meta {
+  name: create deployment - success (multipart bundle)
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/applications/{{app_id}}/deployments
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  bundle: @file(../../internal/deployment/samples/node-express.tar.gz)
+}

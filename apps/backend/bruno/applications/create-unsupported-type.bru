@@ -1,0 +1,19 @@
+meta {
+  name: create app - unsupported type (400)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/applications
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "project_id": "{{project_id}}",
+    "type": "container_php",
+    "name": "my-php-app"
+  }
+}

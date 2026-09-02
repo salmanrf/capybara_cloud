@@ -1,0 +1,11 @@
+meta {
+  name: find app config - success
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/applications/{{app_id}}/configs
+  body: none
+  auth: none
+}

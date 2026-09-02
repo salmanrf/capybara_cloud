@@ -1,0 +1,17 @@
+meta {
+  name: create deployment - wrong content type (400)
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/applications/{{app_id}}/deployments
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "bundle": "not-a-file"
+  }
+}
