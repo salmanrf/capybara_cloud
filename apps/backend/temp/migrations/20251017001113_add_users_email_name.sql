@@ -1,0 +1,4 @@
+ALTER TABLE "user_accounts"
+ADD COLUMN "email" VARCHAR(100) UNIQUE NOT NULL,
+ADD COLUMN "full_name" VARCHAR(500) NOT NULL,
+ADD COLUMN "hashed_password" TEXT NOT NULL;
