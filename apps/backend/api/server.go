@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -19,6 +20,13 @@ type api_server struct {
 	http.Handler
 }
 
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Request: %s %s", r.Method, r.URL.Path)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func NewAPIServer(
 	ctx context.Context,
 	application_service application.Service,
@@ -30,6 +38,8 @@ func NewAPIServer(
 	jwt_validator utils.JWT,
 ) http.Handler {
 	router := chi.NewRouter()
+
+	router.Use(LoggingMiddleware)
 
 	router.Route("/api", func (r chi.Router) {
 		r.Mount("/applications", routes.SetupApplicationRouter(
