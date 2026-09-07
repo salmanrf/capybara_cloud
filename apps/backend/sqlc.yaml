@@ -5,7 +5,7 @@ cloud:
   hostname: ""
 servers: []
 sql:
-  - schema: "sql/schema"
+  - schema: "supabase/migrations"
     queries: "sql/queries"
     engine: "postgresql"
     gen:
