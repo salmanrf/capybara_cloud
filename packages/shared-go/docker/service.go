@@ -30,6 +30,11 @@ type DockerRunResult struct {
 	HostPort int
 }
 
+type DockerBuildDto struct {
+	ContextPath string
+	Tag         string
+}
+
 func (cfg *DockerConfig) Validate() (bool, error) {
 	if cfg.AccessToken == "" {
 		return false, errors.New("AccessToken not provided/invalid")
@@ -43,10 +48,11 @@ func (cfg *DockerConfig) Validate() (bool, error) {
 }
 
 type Docker interface {
-	FindOneImageByName(string) (*image.Summary, error)
+	FindOneImageByRepoTag(string) (*image.Summary, error)
 	Push(string) error
 	Pull(string) error
 	Run(DockerRunDto) (*DockerRunResult, error)
+	Build(DockerBuildDto) error
 }
 
 type docker struct {
@@ -61,7 +67,7 @@ func New(config DockerConfig, port_allocator deployment.PortAllocatorService) (D
 	return &docker{docker_client, &config, port_allocator}, err
 }
 
-func (d *docker) FindOneImageByName(name string) (*image.Summary, error) {
+func (d *docker) FindOneImageByRepoTag(repotag string) (*image.Summary, error) {
 	ctx := context.Background()
 	image_list, err := d.client.ImageList(
 		ctx, 
@@ -70,6 +76,9 @@ func (d *docker) FindOneImageByName(name string) (*image.Summary, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	cfg := d.config
+	name := fmt.Sprintf("%s/%s", cfg.Namespace, repotag)
 
 	for _, ct := range image_list.Items {
 		for _, n := range ct.RepoTags {
@@ -88,8 +97,11 @@ func (d *docker) login() error {
 		fmt.Println("Push error: unable to find docker executable", err)
 		return nil
 	}
-	
+
 	logincmd := exec.Command(docker, "login", "-u", d.config.Username, "-p", d.config.AccessToken)
+	stdout, _ := logincmd.StdoutPipe()
+	stderr, _ := logincmd.StderrPipe()
+	logstream(stdout, stderr, "login out: ", "login err: ")
 	if err := logincmd.Run(); err != nil {
 		fmt.Println("Login error: failed to authenticate", err)
 		return err
@@ -98,7 +110,7 @@ func (d *docker) login() error {
 	return nil
 }
 
-func (d *docker) Push(image_name string) error {
+func (d *docker) Push(full_ref string) error {
 	docker, err := exec.LookPath("docker")
 	if err != nil {
 		fmt.Println("Push error: unable to find docker executable", err)
@@ -109,7 +121,7 @@ func (d *docker) Push(image_name string) error {
 		return err
 	}
 
-	pushcmd := exec.Command(docker, "push", image_name)
+	pushcmd := exec.Command(docker, "push", full_ref)
 	stdout, _ := pushcmd.StdoutPipe()
 	stderr, _ := pushcmd.StderrPipe()
 	logstream(stdout, stderr, "push out: ", "push err: ")
@@ -117,7 +129,7 @@ func (d *docker) Push(image_name string) error {
 		fmt.Println("Push error: ", err)
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -140,7 +152,7 @@ func (d *docker) Pull(image_name string) error {
 		fmt.Println("Push error: ", err)
 		return err
 	}
-	
+
 	return nil
 } 
 
@@ -164,7 +176,7 @@ func (d *docker) Run(dto DockerRunDto) (res *DockerRunResult, err error) {
 		fmt.Sprintf("%d:%d", host_port, dto.ContainerPort), 
 		"--name", dto.ContainerName, 
 	}
-	
+
 	for k, v := range dto.EnvVars {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
@@ -189,6 +201,25 @@ func (d *docker) Run(dto DockerRunDto) (res *DockerRunResult, err error) {
 	
 	return res, err
 } 
+
+func (d *docker) Build(dto DockerBuildDto) error {
+	docker, err := exec.LookPath("docker")
+	if err != nil {
+		fmt.Println("Build error: unable to find docker executable", err)
+		return err
+	}
+
+	buildcmd := exec.Command(docker, "build", dto.ContextPath, "-t", dto.Tag)
+	stdout, _ := buildcmd.StdoutPipe()
+	stderr, _ := buildcmd.StderrPipe()
+	logstream(stdout, stderr, "build out: ", "build err: ")
+	if err := buildcmd.Run(); err != nil {
+		fmt.Println("Build error: ", err)
+		return err
+	}
+
+	return nil
+}
 
 func logstream(stdout, stderr io.Reader, outprefix, errprefix string) {
 	errbuf := make([]byte, 1024)

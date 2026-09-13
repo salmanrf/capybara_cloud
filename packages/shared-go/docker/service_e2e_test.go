@@ -2,6 +2,7 @@ package docker
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,11 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/moby/moby/api/types/image"
+	"github.com/moby/moby/client"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
@@ -110,10 +114,15 @@ func TestDockerConfig(t *testing.T) {
 	})
 }
 
-func TestFindOneImageByNameE2E(t *testing.T) {
-	cfg := DockerConfig{}
+func TestFindOneImageByRepoTagE2E(t *testing.T) {
+	flag.Set("test.timeout", "10m")
 	
-	_, err := exec.LookPath("docker")
+	cfg, err := load_dockercfg()
+	if err != nil {
+		t.Fatal("got unexpected error loading docker config from env", err)
+	}
+	
+	_, err = exec.LookPath("docker")
 	if err != nil {
 		t.Fatal("got unexpected error when searching docker executable", err)
 	}
@@ -128,29 +137,35 @@ func TestFindOneImageByNameE2E(t *testing.T) {
 		t.Fatal("go unexpected error searching for docker cli executable", err)
 	}
 
+	// ? For giving 'hello-world' another tags
 	tests := []struct{
-		name string
+		repotag string
 	}{
-		{"mrfreshgallery:123"},
+		{
+			"mrfreshgallery:123",
+		},
 		{fmt.Sprintf("mrserafino:%s", utils.DockerSafeDateString(time.Now()))},
 	}
 
+	// ? Start clean, use lightweight image for testing
 	defer dockerimagerm(docker_cli, "hello-world")
 	
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("should find image %s", tt.name), func (t *testing.T) {
-			dockerpull := exec.Command(docker_cli, "pull", "hello-world")
-			if err := dockerpull.Run(); err != nil {
+		t.Run(fmt.Sprintf("should find image with repotag %s", tt.repotag), func (t *testing.T) {
+			full_ref := fmt.Sprintf("%s/%s/%s", cfg.Registry, cfg.Namespace, tt.repotag)
+			
+			err := docker_service.Pull("hello-world")
+			if err != nil {
 				t.Fatal("got unexpected error setting up test containers", err)
 			}
-			dockertag := exec.Command(docker_cli, "tag", "hello-world", tt.name)
+			dockertag := exec.Command(docker_cli, "tag", "hello-world", full_ref)
 			if err := dockertag.Run(); err != nil {
 				t.Fatal("got unexpected error setting up test containers", err)
 			}
 
-			defer dockerimagerm(docker_cli, tt.name)
+			defer dockerimagerm(docker_cli, tt.repotag)
 
-			res, err := docker_service.FindOneImageByName(tt.name)
+			res, err := docker_service.FindOneImageByRepoTag(tt.repotag)
 			if err != nil {
 				t.Fatalf("got error %v, want nil", err)
 			}
@@ -262,7 +277,7 @@ func TestPullImageE2E(t *testing.T) {
 				t.Fatalf("got unexpected error %v, want nil", err)
 			}
 
-			img, err := docker_service.FindOneImageByName(tt.name)
+			img, err := docker_service.FindOneImageByRepoTag(tt.name)
 			if err != nil {
 				t.Fatalf("got unexpected error %v, want nil", err)
 			}
@@ -467,6 +482,103 @@ func TestRunContainerE2E(t *testing.T) {
 					}
 				}
 			})
+		}
+	})
+}
+
+func TestBuildImageE2E(t *testing.T) {
+	flag.Set("test.timeout", "10m")
+	ctx := context.Background()
+
+	docker_service, err := New(DockerConfig{}, &deployment.StubPortAllocatorService{})
+	if err != nil {
+		t.Fatal("got unexpected error instantiating sut", err)
+	}
+
+	docker, err := client.New(client.FromEnv)
+	if err != nil {
+		t.Fatal("unable to instantiate docker client", err)
+	}
+
+	pwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// * Uses /docker/test-samples/<filename>
+	tests := []struct{
+		name string
+		artifact_filename string
+	}{
+		{"app-html", "sample-html.tar.gz"},
+		{"app-vue", "sample-vue.tar.gz"},
+	}
+
+	t.Run("should build container image from extracted artifact", func (t *testing.T) {
+		for _, tt := range tests {
+			want_image_name := fmt.Sprintf("%s:%s", tt.name, utils.DockerSafeDateString(time.Now()))
+
+			t.Run(fmt.Sprintf("should build container image %s", want_image_name), func (t *testing.T) {
+				build_path := t.TempDir()
+				artifact_path := path.Join(pwd, "test-samples", tt.artifact_filename)
+
+				extract := exec.Command("tar", "-xzf", artifact_path, "-C", build_path)
+				if err := extract.Run(); err != nil {
+					t.Fatal("got unexpected error extracting artifact", err)
+				}
+
+				dockerfile, err := os.ReadFile(path.Join(pwd, "test-samples", "Dockerfile"))
+				if err != nil {
+					t.Fatal("got unexpected error reading template Dockerfile", err)
+				}
+				if err := os.WriteFile(path.Join(build_path, "Dockerfile"), dockerfile, 0o644); err != nil {
+					t.Fatal("got unexpected error writing Dockerfile", err)
+				}
+
+				err = docker_service.Build(DockerBuildDto{ContextPath: build_path, Tag: want_image_name})
+				if err != nil {
+					t.Fatalf("got error %v, want nil", err)
+				}
+
+				image_list, err := docker.ImageList(ctx, client.ImageListOptions{})
+				if err != nil {
+					t.Fatal("got error from docker image list", err)
+				}
+
+				got_found := false
+				var found image.Summary
+				for _, ct := range image_list.Items {
+					for _, n := range ct.RepoTags {
+						if n != "" && strings.Contains(want_image_name, n) {
+							got_found = true
+							found = ct
+							break
+						}
+					}
+					if got_found {
+						break
+					}
+				}
+
+				defer func (ct image.Summary) {
+					if ct.ID != "" {
+						if _, err := docker.ImageRemove(ctx, ct.ID, client.ImageRemoveOptions{Force: true}); err != nil {
+							t.Logf("got unexpected error from delete image %v", err)
+						}
+					}
+				}(found)
+
+				if !got_found {
+					t.Fatalf("got container '%s' found == %v, want %v", want_image_name, got_found, true)
+				}
+			})
+		}
+	})
+
+	t.Run("should return error if build context does not exist", func (t *testing.T) {
+		err := docker_service.Build(DockerBuildDto{ContextPath: "/tmp/does-not-exist-capy", Tag: "mrnope:1"})
+		if err == nil {
+			t.Fatal("got error nil, want error")
 		}
 	})
 }
