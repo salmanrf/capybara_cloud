@@ -1,7 +1,7 @@
 meta {
   name: create deployment - success (multipart bundle)
   type: http
-  seq: 11
+  seq: 1
 }
 
 post {
@@ -11,5 +11,5 @@ post {
 }
 
 body:multipart-form {
-  bundle: @file(../../internal/deployment/samples/node-express.tar.gz)
+  bundle: @file(/Users/m/projects/capybara_cloud/apps/backend/internal/deployment/samples/node-express.tar.gz) @contentType(application/gzip)
 }

@@ -1,0 +1,19 @@
+meta {
+  name: create deployment - unauthorized (401)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/applications/{{app_id}}/deployments
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Cookie: sid=invalid-token
+}
+
+body:multipart-form {
+  bundle: @file(../../internal/deployment/samples/node-express.tar.gz)
+}

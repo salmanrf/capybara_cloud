@@ -1,0 +1,16 @@
+meta {
+  name: create deployment - empty form-data (400)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/applications/{{app_id}}/deployments
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: multipart/form-data
+  Content-Length: 0
+}

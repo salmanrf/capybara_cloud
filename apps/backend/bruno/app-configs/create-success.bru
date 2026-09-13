@@ -1,7 +1,7 @@
 meta {
   name: create app config - success
   type: http
-  seq: 8
+  seq: 1
 }
 
 post {
@@ -13,9 +13,6 @@ post {
 body:json {
   {
     "port": 3000,
-    "variables": {
-      "NODE_ENV": "production",
-      "LOG_LEVEL": "info"
-    }
+    "variables": {}
   }
 }
