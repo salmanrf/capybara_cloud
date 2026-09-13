@@ -17,7 +17,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/organization"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/user"
-	config "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
+	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/docker"
@@ -35,11 +35,13 @@ func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
 	return dbpool
 }
 
-func setup() (context.Context, config.Config, *pgxpool.Pool, error) {
+func setup() (context.Context, locutils.Config, *pgxpool.Pool, error) {
+	locutils.CreateLogger()
+
 	pwd, _ := os.Getwd()
 	envpath := filepath.Join(pwd, ".env")
 
-	cfg, err := config.LoadConfig(envpath)
+	cfg, err := locutils.LoadConfig(envpath)
 	if err != nil {
 		return nil, cfg, nil, err
 	}
@@ -74,7 +76,8 @@ func main() {
 	queries := database.New(db_conn)
 	application_repository := application.NewRepository(ctx, queries)
 	deployment_repository := deployment.NewDeploymentRepository(ctx, queries)
-	deploy_chan := make(chan deployment.DeployRequest)
+	deploy_in_chan := make(chan deployment.DeployRequest)
+	deploy_out_chan := make(chan deployment.DeployStepResult)
 	
 	user_service := user.NewService(ctx, queries)
 	auth_service := auth.NewService(ctx, user_service)
@@ -85,6 +88,7 @@ func main() {
 	docker_service, err := docker.New(
 		docker.DockerConfig{
 			Registry: cfg.DOCKER_REGISTRY,
+			Namespace: cfg.DOCKER_NAMESPACE,
 			AccessToken: cfg.DOCKER_ACCESS_TOKEN,
 			Username: cfg.DOCKER_USER,
 		},
@@ -101,7 +105,14 @@ func main() {
 		masbro_service,
 		port_allocator_service, 
 		deployment_repository, 
-		deploy_chan,
+		deploy_in_chan,
+	)
+	listener_service := deployment.NewListener(
+		ctx,
+		deploy_in_chan,
+		deploy_out_chan,
+		deployment_service,
+		masbro_service,
 	)
 	jwt_utils := utils.NewJWTUtils(cfg.AUTH_JWT_SECRET, cfg.AUTH_JWT_ISSUER, []string{cfg.AUTH_JWT_AUDIENCE})
 
@@ -117,6 +128,8 @@ func main() {
 	)
 
 	address := fmt.Sprintf(":%s", cfg.API_PORT)
+	fmt.Println("Starting Listeners")
+	go listener_service.Listen()
 	fmt.Printf("Starting API server on %s\n", address)
 	if err := http.ListenAndServe(address, api_server); err != nil {
 		log.Fatalf("Server failed: %v", err)
