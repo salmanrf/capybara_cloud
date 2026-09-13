@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/moby/moby/api/types/image"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/application"
 	config "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
@@ -19,7 +21,8 @@ func TestDeployPush(t *testing.T) {
 	deployment_repository := &StubAppDeploymentRepository{}
 
 	cfg := config.GetConfig()
-	cfg.DOCKER_REGISTRY = "salmanrf"
+	cfg.DOCKER_REGISTRY = "docker.io"
+	cfg.DOCKER_NAMESPACE = "salmanrf"
 	cfg.BASE_BUILD_PATH = "/tmp/masmasbro/builds"
 	cfg.BASE_ARTIFACT_PATH = "/tmp/masmasbro/artifacts"
 	config.SetConfig(cfg)
@@ -55,7 +58,7 @@ func TestDeployPush(t *testing.T) {
 		got_dp := res.DeploymentDto
 
 		got_new_status := got_dp.Status
-		want_new_status := -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		want_new_status := deploy_req.DeploymentDto.Status
 		if got_new_status != int32(want_new_status) {
 			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
 		}
@@ -73,7 +76,8 @@ func TestDeployPush(t *testing.T) {
 		defer docker.Clear()
 
 		mock_dp := database.ApplicationDeployment{
-			ContainerImgName: "mrfreshgallery-backend-123",
+			ContainerRepository: pgtype.Text{String: "mrfreshgallery-backend", Valid: true},
+			ContainerTag: pgtype.Text{String: "123", Valid: true},
 		}
 		deploy_req := DeployRequest{
 			ApplicationDto: database.Application{
@@ -93,17 +97,13 @@ func TestDeployPush(t *testing.T) {
 		got_dp := res.DeploymentDto
 
 		got_new_status := got_dp.Status
-		want_new_status := -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
+		want_new_status := deploy_req.DeploymentDto.Status
 		if got_new_status != int32(want_new_status) {
 			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
 		}
 	})
-	
-	t.Run("should correctly uses internal Docker API", func (t *testing.T) {
-		cfg := config.GetConfig()
-		cfg.DOCKER_REGISTRY = "docker.io/test"
-		config.SetConfig(cfg)
 
+	t.Run("should correctly uses internal Docker API", func (t *testing.T) {
 		mock_image_summary := &image.Summary{
 			ID: "abcd",
 			RepoTags: []string{"mrfreshgallery-backend-123"},
@@ -114,8 +114,10 @@ func TestDeployPush(t *testing.T) {
 		defer docker.Clear()
 
 		mock_dp := database.ApplicationDeployment{
-			ContainerImgName: 
-				fmt.Sprintf("%s/mrfreshgallery-backend-123", cfg.DOCKER_REGISTRY),
+			ContainerRegistry: pgtype.Text{String: "docker.io", Valid: true},
+			ContainerNamespace: pgtype.Text{String: "test", Valid: true},
+			ContainerRepository: pgtype.Text{String: "mrfreshgallery-backend", Valid: true},
+			ContainerTag: pgtype.Text{String: "123", Valid: true},
 		}
 		deploy_req := DeployRequest{
 			ApplicationDto: database.Application{
@@ -127,8 +129,17 @@ func TestDeployPush(t *testing.T) {
 
 		_, err := deployment_service.Push(deploy_req)
 	
-		parts := strings.Split(mock_dp.ContainerImgName, fmt.Sprintf("%s/", cfg.DOCKER_REGISTRY))
-		want_repo_tag := parts[1]
+		want_repo_tag := fmt.Sprintf(
+			"%s:%s", 
+			mock_dp.ContainerRepository.String,
+			mock_dp.ContainerTag.String,
+		)
+		want_full_ref := fmt.Sprintf(
+			"%s/%s/%s",
+			mock_dp.ContainerRegistry.String,
+			mock_dp.ContainerNamespace.String,
+			want_repo_tag,
+		)
 
 		got_find_called_n_times := docker.find_one_image_by_name_return_n_calls
 		want_find_called_n_times := 1
@@ -136,10 +147,10 @@ func TestDeployPush(t *testing.T) {
 			t.Errorf("got find one image called %d times, want %d times", got_find_called_n_times, want_find_called_n_times)
 		}
 
-		got_find_called_with_name := docker.find_one_image_by_name_return_call_args[0]
-		want_find_called_with_name := want_repo_tag
-		if got_find_called_with_name != want_find_called_with_name {
-			t.Errorf("got find one image called with '%s', want '%s'", got_find_called_with_name, want_find_called_with_name)
+		got_find_called_with_repotag := docker.find_one_image_by_name_return_call_args[0]
+		want_find_called_with_repotag := want_repo_tag
+		if got_find_called_with_repotag != want_find_called_with_repotag {
+			t.Errorf("got find one image called with '%s', want '%s'", got_find_called_with_repotag, want_find_called_with_repotag)
 		}
 
 		got_push_called_n_times := docker.push_return_n_calls
@@ -153,13 +164,13 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_push_called_with_name := docker.push_return_call_args[0]
-		want_push_called_with_name := want_repo_tag
+		want_push_called_with_name := want_full_ref
 		if got_push_called_with_name!= want_push_called_with_name {
 			t.Errorf("got push called with container image name %s, want %s", got_push_called_with_name, want_push_called_with_name)
 		}
 	})
 
-	t.Run("should perform push when image exists", func (t *testing.T) {
+	t.Run("should return deployment unchanged when push was successful", func (t *testing.T) {
 		mock_image_summary := &image.Summary{
 			ID: "abcd",
 			RepoTags: []string{"mrfreshgallery-123"},
@@ -169,12 +180,22 @@ func TestDeployPush(t *testing.T) {
 
 		defer docker.Clear()
 
+		mock_app := database.Application{
+			Name: "mrfreshgallery",
+		}
+		mock_dp := database.ApplicationDeployment{
+			StorageService: "localfs",
+			Status: 3,
+		}
+		mock_app.AppID.Scan(uuid.New().String())
+		mock_dp.AppID = mock_app.AppID
+		mock_dp.AppDpID.Scan(uuid.New().String())
+		mock_dp.ContainerRegistry = pgtype.Text{String: cfg.DOCKER_REGISTRY, Valid: true} 
+		mock_dp.ContainerNamespace = pgtype.Text{String: cfg.DOCKER_NAMESPACE, Valid: true} 
 		deploy_req := DeployRequest{
-			ApplicationDto: database.Application{
-				Name: "mrfreshgallery",
-			},
+			ApplicationDto: mock_app,
+			DeploymentDto: mock_dp,
 			ApplicationConfig: database.ApplicationConfig{},
-			DeploymentDto: database.ApplicationDeployment{},
 		}
 
 		res, err := deployment_service.Push(deploy_req)
@@ -183,11 +204,10 @@ func TestDeployPush(t *testing.T) {
 		}
 
 		got_dp := res.DeploymentDto
+		want_dp := mock_dp
 
-		got_new_status := got_dp.Status
-		want_new_status := shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
-		if got_new_status != int32(want_new_status) {
-			t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)
+		if diff := cmp.Diff(got_dp, want_dp); diff != "" {
+			t.Error(diff)
 		}
 	})
 }

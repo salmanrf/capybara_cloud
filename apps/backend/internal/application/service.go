@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
@@ -17,7 +18,7 @@ import (
 type Service interface {
 	Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error)
 	Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error)
-	FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error)
+	FindOneComplete(app_id string, user_id string) (*database.FindOneApplicationCompleteRow, error)
 	CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error)
 	FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error)
 }
@@ -69,32 +70,37 @@ func (s *service) Create(user_id string, dto dto.CreateApplicationDto) (*databas
 	return new_application, nil
 }
 
-func (s *service) FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error) {
+func (s *service) FindOneComplete(app_id string, user_id string) (*database.FindOneApplicationCompleteRow, error) {
 	app_uuid := pgtype.UUID{}
 	app_uuid.Scan(app_id)
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	app_with_pm, err := s.repository.FindOneWithProjectMember(
-		database.FindOneApplicationWithProjectMemberParams{
+	app_complete, err := s.repository.FindOneComplete(
+		database.FindOneApplicationCompleteParams{
 			AppID: app_uuid,
 			UserID: user_uuid,
 		},
 	)
 
-	if !app_with_pm.AppID.Valid {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
-
-	if !app_with_pm.PmProjectID.Valid {
+	if err != nil {
+		return nil, err
+	}
+	if app_complete == nil || !app_complete.AppID.Valid {
+		return nil, nil
+	}
+	if !app_complete.ProjectMember.ProjectID.Valid {
 		return nil, errors.New("permission_denied")
 	}
-	
-	return app_with_pm, err
+
+	return app_complete, nil
 }
 
 func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicationDto) (*database.Application, error) {
-	app_with_pm, err := s.FindOne(app_id, user_id)
+	app_with_pm, err := s.FindOneComplete(app_id, user_id)
 
 	if err != nil {
 		errmsg := err.Error()
@@ -132,8 +138,8 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	app_with_pm, err := s.repository.FindOneWithProjectMember(
-		database.FindOneApplicationWithProjectMemberParams{
+	app_with_pm, err := s.repository.FindOneComplete(
+		database.FindOneApplicationCompleteParams{
 			AppID: app_uuid,
 			UserID: user_uuid,
 		},
@@ -145,7 +151,7 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 	if app_with_pm == nil || !app_with_pm.AppID.Valid {
 		return nil, errors.New("not_found")
 	}
-	if !app_with_pm.PmProjectID.Valid {
+	if !app_with_pm.ProjectMember.ProjectID.Valid {
 		return nil, errors.New("permission_denied")
 	}
 
@@ -157,7 +163,7 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 
 	params := database.CreateApplicationConfigParams{
 		AppID: app_uuid,
-		Port: int32(dto.Port),
+		Port: pgtype.Int4{Int32: int32(dto.Port), Valid: true},
 		VariablesJson: variables_json.Bytes(),
 	} 
 	app_cfg, err := s.repository.UpsertConfig(params)
@@ -171,8 +177,8 @@ func (s *service) FindOneConfig(app_id string, user_id string) (*dto.Application
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	app_with_pm, err := s.repository.FindOneWithProjectMember(
-		database.FindOneApplicationWithProjectMemberParams{
+	app_with_pm, err := s.repository.FindOneComplete(
+		database.FindOneApplicationCompleteParams{
 			AppID: app_uuid,
 			UserID: user_uuid,
 		},
@@ -184,7 +190,7 @@ func (s *service) FindOneConfig(app_id string, user_id string) (*dto.Application
 	if app_with_pm == nil || !app_with_pm.AppID.Valid {
 		return nil, errors.New("not_found")
 	}
-	if !app_with_pm.PmProjectID.Valid {
+	if !app_with_pm.ProjectMember.ProjectID.Valid {
 		return nil, errors.New("permission_denied")
 	}
 	if !app_with_pm.ApplicationConfig.AppCfgID.Valid {
@@ -203,7 +209,7 @@ func (s *service) FindOneConfig(app_id string, user_id string) (*dto.Application
 	response := &dto.ApplicationConfigResponse{
 		AppCfgID:        app_with_pm.ApplicationConfig.AppCfgID.String(),
 		AppID:           app_with_pm.ApplicationConfig.AppID.String(),
-		Port: int(app_with_pm.ApplicationConfig.Port),
+		Port: int(app_with_pm.ApplicationConfig.Port.Int32),
 		VariablesJson:   string(app_with_pm.ApplicationConfig.VariablesJson),
 		ConfigVariables: configVariables,
 		CreatedAt:       app_with_pm.CreatedAt.Time,

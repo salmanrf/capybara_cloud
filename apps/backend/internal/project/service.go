@@ -75,7 +75,7 @@ func (s *service) Create(user_id string, org_id string, project_name  string) (*
 		database.CreateProjectMemberParams{
 			ProjectID: project.ProjectID,
 			UserID: user.UserID,
-			Role: "owner",
+			Role: pgtype.Text{String: "owner", Valid: true},
 		},
 	)
 

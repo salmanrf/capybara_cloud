@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 ) 
@@ -55,7 +56,7 @@ func TestDeployListener(t *testing.T) {
 		VersionNumber: 1,
 	}
 	mock_app_cfg := database.ApplicationConfig{
-		Port: 3000,
+		Port: pgtype.Int4{Int32: 3000, Valid: true},
 	}
 
 	deploy_request := DeployRequest{
@@ -340,6 +341,68 @@ func TestDeployResultListener(t *testing.T) {
 		}
 	})
 
+	t.Run("should not update when status is negative (already errored)", func (t *testing.T) {
+		in_chan := make(chan DeployRequest)
+		out_chan := make(chan DeployStepResult)
+
+		masbro_service := StubMasbroService{}
+		deployment_service := createDeploymentServiceStub()
+		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+
+		defer func () {
+			deployment_service.Clear()
+			close(in_chan)
+			close(out_chan)
+		}()
+
+		req := result
+		req.DeploymentDto.Status = -shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
+		req.DeploymentError = nil
+
+		go listener_service.Listen()
+		out_chan <- req
+
+		timer := time.NewTimer(500 * time.Millisecond)
+		<- timer.C
+
+		got_update_called := deployment_service.update_n_calls
+		want_update_called := 0
+		if got_update_called != want_update_called {
+			t.Fatalf("got deployment update called %d times, want %d", got_update_called, want_update_called)
+		}
+	})
+
+	t.Run("should not update when status is unrecognized", func (t *testing.T) {
+		in_chan := make(chan DeployRequest)
+		out_chan := make(chan DeployStepResult)
+
+		masbro_service := StubMasbroService{}
+		deployment_service := createDeploymentServiceStub()
+		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+
+		defer func () {
+			deployment_service.Clear()
+			close(in_chan)
+			close(out_chan)
+		}()
+
+		req := result
+		req.DeploymentDto.Status = 999
+		req.DeploymentError = nil
+
+		go listener_service.Listen()
+		out_chan <- req
+
+		timer := time.NewTimer(500 * time.Millisecond)
+		<- timer.C
+
+		got_update_called := deployment_service.update_n_calls
+		want_update_called := 0
+		if got_update_called != want_update_called {
+			t.Fatalf("got deployment update called %d times, want %d", got_update_called, want_update_called)
+		}
+	})
+
 	t.Run("should continue processing from DEPLOY_STATUS_INITIATED to DEPLOY_STATUS_BUILD_INSTANCE_STARTED", func (t *testing.T) {
 		in_chan := make(chan DeployRequest)
 		out_chan := make(chan DeployStepResult)
@@ -387,15 +450,10 @@ func TestDeployResultListener(t *testing.T) {
 		if got_push_called != want_push_called {
 			t.Fatalf("got deployment Extract called %d times, want %d", got_push_called, want_push_called)
 		}
-		got_create_instance_called := deployment_service.create_instance_n_calls
-		want_create_instance_called := 1
-		if got_create_instance_called != want_create_instance_called {
-			t.Fatalf("got deployment Extract called %d times, want %d", got_create_instance_called, want_create_instance_called)
-		}
-		got_update_instance_called := deployment_service.update_instance_n_calls
-		want_update_instance_called := 1
-		if got_update_instance_called != want_update_instance_called {
-			t.Fatalf("got deployment Extract called %d times, want %d", got_update_instance_called, want_update_instance_called)
+		got_start_called := deployment_service.start_n_calls
+		want_start_called := 1
+		if got_start_called != want_start_called {
+			t.Fatalf("got deployment Start called %d times, want %d", got_start_called, want_start_called)
 		}
 	})
 
@@ -441,15 +499,10 @@ func TestDeployResultListener(t *testing.T) {
 		if got_push_called != want_push_called {
 			t.Fatalf("got deployment Extract called %d times, want %d", got_push_called, want_push_called)
 		}
-		got_create_instance_called := deployment_service.create_instance_n_calls
-		want_create_instance_called := 1
-		if got_create_instance_called != want_create_instance_called {
-			t.Fatalf("got deployment Extract called %d times, want %d", got_create_instance_called, want_create_instance_called)
-		}
-		got_update_instance_called := deployment_service.update_instance_n_calls
-		want_update_instance_called := 1
-		if got_update_instance_called != want_update_instance_called {
-			t.Fatalf("got deployment Extract called %d times, want %d", got_update_instance_called, want_update_instance_called)
+		got_start_called := deployment_service.start_n_calls
+		want_start_called := 1
+		if got_start_called != want_start_called {
+			t.Fatalf("got deployment Start called %d times, want %d", got_start_called, want_start_called)
 		}
 	})
 
@@ -489,15 +542,10 @@ func TestDeployResultListener(t *testing.T) {
 			t.Fatalf("got deployment update called %d times, want %d", got_update_called, want_update_called)
 		}
 
-		got_create_instance_called := deployment_service.create_instance_n_calls
-		want_create_instance_called := 1
-		if got_create_instance_called != want_create_instance_called {
-			t.Fatalf("got deployment Extract called %d times, want %d", got_create_instance_called, want_create_instance_called)
-		}
-		got_update_instance_called := deployment_service.update_instance_n_calls
-		want_update_instance_called := 1
-		if got_update_instance_called != want_update_instance_called {
-			t.Fatalf("got deployment Extract called %d times, want %d", got_update_instance_called, want_update_instance_called)
+		got_start_called := deployment_service.start_n_calls
+		want_start_called := 1
+		if got_start_called != want_start_called {
+			t.Fatalf("got deployment Start called %d times, want %d", got_start_called, want_start_called)
 		}
 	})
 

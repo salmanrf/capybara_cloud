@@ -17,11 +17,13 @@ type Config struct {
 	AUTH_JWT_AUDIENCE 				string
 	MAX_DEPLOY_FORM_SIZE 			int
 	MAX_DEPLOY_BUNDLE_SIZE 		int
-	DOCKER_REGISTRY 					string
+	DOCKER_REGISTRY 				string
+	DOCKER_NAMESPACE 				string
 	DOCKER_ACCESS_TOKEN 			string
 	DOCKER_USER 							string
 	BASE_ARTIFACT_PATH 				string
 	BASE_BUILD_PATH 					string
+	DOCKER_TEMPLATES_DIR 			string
 }
 
 var app_cfg = Config{}
@@ -39,14 +41,20 @@ func LoadConfig(env_path string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("invalid MAX_DEPLOY_BUNDLE_SIZE: %w", err)
 	}
+	templates_dir := os.Getenv("DOCKER_TEMPLATES_DIR")
+	if templates_dir == "" {
+		templates_dir = "internal/deployment/templates"
+	}
 	cfg := Config{
 		POSTGRES_URI:    			os.Getenv("POSTGRES_URI"),
 		API_PORT:        			os.Getenv("API_PORT"),
 		DOCKER_REGISTRY: 			os.Getenv("DOCKER_REGISTRY"),
+		DOCKER_NAMESPACE: 		os.Getenv("DOCKER_NAMESPACE"),
 		DOCKER_ACCESS_TOKEN: 	os.Getenv("DOCKER_ACCESS_TOKEN"),
 		DOCKER_USER: 					os.Getenv("DOCKER_USER"),
 		BASE_ARTIFACT_PATH: os.Getenv("BASE_ARTIFACT_PATH"),
 		BASE_BUILD_PATH: os.Getenv("BASE_BUILD_PATH"),
+		DOCKER_TEMPLATES_DIR: templates_dir,
 		MAX_DEPLOY_FORM_SIZE: max_form_size,
 		MAX_DEPLOY_BUNDLE_SIZE: max_bundle_size,
 		AUTH_JWT_SECRET: 			os.Getenv("AUTH_JWT_SECRET"),
@@ -84,6 +92,9 @@ func (c *Config) Validate() error {
 	if c.DOCKER_REGISTRY == "" {
 		errs = append(errs, errors.New("DOCKER_REGISTRY is required"))
 	}
+	if c.DOCKER_NAMESPACE == "" {
+		errs = append(errs, errors.New("DOCKER_NAMESPACE is required"))
+	}
 
 	if len(errs) > 0 {
 		return errors.Join(errs...)
@@ -105,9 +116,11 @@ func SetConfig(newconf Config) {
 		MAX_DEPLOY_FORM_SIZE: 		newconf.MAX_DEPLOY_FORM_SIZE,
 		MAX_DEPLOY_BUNDLE_SIZE: 	newconf.MAX_DEPLOY_BUNDLE_SIZE,
 		DOCKER_REGISTRY: 					newconf.DOCKER_REGISTRY,
+		DOCKER_NAMESPACE: 				newconf.DOCKER_NAMESPACE,
 		DOCKER_ACCESS_TOKEN: 			newconf.DOCKER_ACCESS_TOKEN,
 		DOCKER_USER: 							newconf.DOCKER_USER,
 		BASE_ARTIFACT_PATH: 			newconf.BASE_ARTIFACT_PATH,
 		BASE_BUILD_PATH: 					newconf.BASE_BUILD_PATH,
+		DOCKER_TEMPLATES_DIR: 		newconf.DOCKER_TEMPLATES_DIR,
 	}
 }

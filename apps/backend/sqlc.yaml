@@ -13,6 +13,21 @@ sql:
         out: "../../packages/shared-go/database"
         sql_package: "pgx/v5"
         emit_json_tags: true
+        overrides:
+          # application_configs and project_members are LEFT JOINed via sqlc.embed in FindOneApplicationComplete.
+          # Every NOT NULL column there must map to a nullable pgtype or Scan fails when the joined row is missing.
+          - column: "application_configs.port"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "application_configs.runtime_type"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "project_members.role"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
 plugins: []
 rules: []
 options: {}

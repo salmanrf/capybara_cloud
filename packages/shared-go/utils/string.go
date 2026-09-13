@@ -1,16 +1,22 @@
 package utils
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 )
 
-func GetDockerRepoTagFromFullName(full string) string {
-	parts := strings.Split(full, "/")
-	size := len(parts)
-	
-	return parts[size - 1]
+func FullImageRef(dep database.ApplicationDeployment) string {
+	return fmt.Sprintf(
+		"%s/%s/%s:%s",
+		dep.ContainerRegistry.String,
+		dep.ContainerNamespace.String,
+		dep.ContainerRepository.String,
+		dep.ContainerTag.String,
+	)
 }
 
 func Slugify(in string) string {

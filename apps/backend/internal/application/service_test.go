@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 )
@@ -26,7 +28,7 @@ func TestApplicationService(t *testing.T) {
 		app_id := "a7e4e583-471c-4b51-bcdd-7fb57291c5cb"
 		user_id := "3ad11d5d-5a7e-433d-ac51-fba7a645f3d4"
 
-		application_repository.find_one_with_project_member_return = nil
+		application_repository.find_one_complete_return = nil
 
 		_, err := application_service.CreateConfig(
 			app_id, 
@@ -48,10 +50,10 @@ func TestApplicationService(t *testing.T) {
 		app_id := "a7e4e583-471c-4b51-bcdd-7fb57291c5cb"
 		user_id := "3ad11d5d-5a7e-433d-ac51-fba7a645f3d4"
 
-		mock_app_with_pm := &database.FindOneApplicationWithProjectMemberRow{}
+		mock_app_with_pm := &database.FindOneApplicationCompleteRow{}
 		mock_app_with_pm.AppID.Valid = true
-		mock_app_with_pm.PmProjectID.Valid = false
-		application_repository.find_one_with_project_member_return = mock_app_with_pm
+		mock_app_with_pm.ProjectMember.ProjectID.Valid = false
+		application_repository.find_one_complete_return = mock_app_with_pm
 		
 		_, err := application_service.CreateConfig(
 			app_id, 
@@ -64,6 +66,36 @@ func TestApplicationService(t *testing.T) {
 
 		if err == nil || got_error.Error() != want_error.Error() {
 			t.Errorf("got error %v, want %v", got_error, want_error)
+		}
+	})
+
+	t.Run("FindOne should return repository error instead of permission_denied", func (t *testing.T) {
+		defer application_repository.Clear()
+
+		app_id := "a7e4e583-471c-4b51-bcdd-7fb57291c5cb"
+		user_id := "3ad11d5d-5a7e-433d-ac51-fba7a645f3d4"
+
+		partial_row := &database.FindOneApplicationCompleteRow{}
+		partial_row.AppID.Valid = true
+		application_repository.find_one_complete_return = partial_row
+		application_repository.find_one_complete_error = errors.New("can't scan into dest[11]: cannot scan NULL into *int32")
+
+		_, err := application_service.FindOneComplete(app_id, user_id)
+
+		if err == nil || err.Error() == "permission_denied" {
+			t.Errorf("got error %v, want scan error", err)
+		}
+	})
+
+	t.Run("FindOne should return nil, nil on pgx.ErrNoRows", func (t *testing.T) {
+		defer application_repository.Clear()
+
+		application_repository.find_one_complete_error = pgx.ErrNoRows
+
+		got, err := application_service.FindOneComplete("a7e4e583-471c-4b51-bcdd-7fb57291c5cb", "3ad11d5d-5a7e-433d-ac51-fba7a645f3d4")
+
+		if got != nil || err != nil {
+			t.Errorf("got %v, %v; want nil, nil", got, err)
 		}
 	})
 }

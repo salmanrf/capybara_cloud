@@ -15,21 +15,34 @@ WHERE
   app_id = $1
 RETURNING *;
 
--- name: FindOneApplicationWithProjectMember :one
-SELECT "app".*, sqlc.embed(config), "pm".project_id pm_project_id, "pm".role role
-FROM 
+-- name: FindOneApplicationComplete :one
+SELECT
+  "app".*,
+  sqlc.embed(config),
+  sqlc.embed(pm),
+  sqlc.embed(project),
+  sqlc.embed(org)
+FROM
   "applications" AS "app"
-LEFT JOIN 
-  "project_members" as "pm" 
-    ON 
+INNER JOIN
+  "projects" AS "project"
+    ON
+      "project".project_id = "app".project_id
+INNER JOIN
+  "organizations" AS "org"
+    ON
+      "org".org_id = "project".org_id
+LEFT JOIN
+  "project_members" AS "pm"
+    ON
       "pm".project_id = "app".project_id
       AND
       "pm".user_id = $2
 LEFT JOIN
-  "application_configs" as "config"
+  "application_configs" AS "config"
     ON
       "config".app_id = "app".app_id
-WHERE 
+WHERE
   "app".app_id = $1
 LIMIT 1;
 

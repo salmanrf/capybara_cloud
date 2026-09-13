@@ -6,6 +6,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 	docker "github.com/salmanrf/capybara-cloud/packages/shared-go/docker"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
 type service struct {
@@ -30,7 +31,7 @@ func (s *service) Start(dto shared_deployment.DeployRequest, instance database.D
 	}
 
 	run_dto := docker.DockerRunDto{
-		ImageName: dep.ContainerImgName,
+		ImageName: utils.FullImageRef(dep),
 		ContainerPort: int(instance.ContainerPort),
 		ContainerName: instance.ContainerName,
 		EnvVars: env_map,

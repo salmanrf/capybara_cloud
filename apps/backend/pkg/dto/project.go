@@ -75,7 +75,7 @@ func NewListMyProjectResponse(dbrows []database.FindProjectsForUserRow) []ListMy
 
 	for i, en := range dbrows {
 		entry := ListMyProjectEntry{
-			Role: en.Role,
+			Role: en.Role.String,
 			Project: &ListMyProjectEntryProject{
 				OrgID: en.OrgID.String(),
 				ProjectID: en.ProjectID.String(),

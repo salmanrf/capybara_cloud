@@ -6,9 +6,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 	docker "github.com/salmanrf/capybara-cloud/packages/shared-go/docker"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
 func TestStart(t *testing.T) {
@@ -22,13 +24,16 @@ func TestStart(t *testing.T) {
 	mock_dp := database.ApplicationDeployment{
 		AppID: mock_app.AppID,
 		Status: shared_deployment.DEPLOY_STATUS_INITIATED,
-		ContainerImgName: "docker.io/capybaracloud/testapp:latest",
+		ContainerRegistry: pgtype.Text{String: "docker.io", Valid: true},
+		ContainerNamespace: pgtype.Text{String: "capybaracloud", Valid: true},
+		ContainerRepository: pgtype.Text{String: "testapp", Valid: true},
+		ContainerTag: pgtype.Text{String: "latest", Valid: true},
 		ArtifactsPath: "",
 		BuildPath: "",
 		VersionNumber: 1,
 	}
 	mock_app_cfg := database.ApplicationConfig{
-		Port: 3000,
+		Port: pgtype.Int4{Int32: 3000, Valid: true},
 		VariablesJson: []byte(
 			`
 				{
@@ -54,7 +59,7 @@ func TestStart(t *testing.T) {
 
 		mock_instance := database.DeploymentInstance{
 			ContainerName: "testapp-v1-abcd",
-			ContainerPort: mock_app_cfg.Port,
+			ContainerPort: mock_app_cfg.Port.Int32,
 		}
 		mock_app_cfg := mock_app_cfg
 		mock_app_cfg.VariablesJson = []byte("invalid json")
@@ -79,7 +84,7 @@ func TestStart(t *testing.T) {
 
 		mock_instance := database.DeploymentInstance{
 			ContainerName: "testapp-v1-abcd",
-			ContainerPort: mock_app_cfg.Port,
+			ContainerPort: mock_app_cfg.Port.Int32,
 		}
 
 		start_res, start_err := masbro_service.Start(deploy_request, mock_instance)
@@ -101,7 +106,7 @@ func TestStart(t *testing.T) {
 
 		got_run_called_with := stub_docker.run_call_args[0]
 		want_run_called_with := docker.DockerRunDto{
-			ImageName: mock_dp.ContainerImgName,
+			ImageName: utils.FullImageRef(mock_dp),
 			ContainerPort: int(mock_instance.ContainerPort),
 			ContainerName: mock_instance.ContainerName,
 			EnvVars: want_env_vars_map,
@@ -131,7 +136,7 @@ func TestStart(t *testing.T) {
 
 	// 	mock_instance := database.DeploymentInstance{
 	// 		ContainerName: "testapp-v1-abcd",
-	// 		ContainerPort: mock_app_cfg.Port,
+	// 		ContainerPort: mock_app_cfg.Port.Int32,
 	// 	}
 
 	// 	_, start_err := masbro_service.Start(deploy_request, mock_instance)

@@ -2,9 +2,10 @@ package deployment
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 
 	masbro_worker "github.com/salmanrf/capybara-cloud/apps/backend/internal/masbro-worker"
+	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 )
 
@@ -17,6 +18,7 @@ type listener struct {
 	out_channel 	 chan DeployStepResult
 	deploy_service Service
 	masbro_service masbro_worker.Service
+	logger 				 slog.Logger
 }
 
 type Listener interface {
@@ -24,12 +26,15 @@ type Listener interface {
 }
 
 func NewListener(ctx context.Context, in_channel chan DeployRequest, out_channel chan DeployStepResult, deploy_service Service, masbro_service masbro_worker.Service) Listener {
+	logger := locutils.Logger
+	
 	return &listener{
 		ctx,
 		in_channel,
 		out_channel,
 		deploy_service,
 		masbro_service,
+		logger,
 	}
 }
 
@@ -48,7 +53,12 @@ func (l *listener) Listen() {
 				continue
 			}
 		}
-		
+
+		app := in.ApplicationDto
+		dep := in.DeploymentDto
+
+		l.logger.Info("Received deployment request", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
+
 		switch in.DeploymentDto.Status {
 		case shared_deployment.DEPLOY_STATUS_INITIATED:
 			go l.handleExtract(in, l.out_channel)
@@ -76,7 +86,15 @@ func (l *listener) listenResult() {
 			}
 		}
 
+		app := in.ApplicationDto
 		dep := in.DeploymentDto
+
+		l.logger.Info("Received deployment result", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
+
+		if dep.Status < 0 {
+			l.logger.Warn("Deployment status is already marked as error, skipping", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
+			continue
+		}
 
 		new_status := in.DeploymentDto.Status
 		switch in.DeploymentDto.Status {
@@ -90,20 +108,24 @@ func (l *listener) listenResult() {
 			new_status = shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED
 		case shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED:
 			continue
+		default:
+			l.logger.Warn("Unrecognized deployment status", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
+			continue
 		}
 
 		step_err := in.DeploymentError
 		if step_err != nil {
+			l.logger.Error("Got deployment step error", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status, "error", step_err.Error())
 			new_status = -new_status
 		}
 		dep.Status = new_status
 
 		updated, err := l.deploy_service.update(dep)
-		if updated == nil|| err != nil {
-			fmt.Println("Error updating deployment", err)
+		if err != nil {
+			l.logger.Error("Unable to update deployment", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status, "error", err.Error())
 			continue
 		}
-		if step_err != nil {
+		if step_err != nil || updated == nil {
 			continue
 		}
 		if updated.Status == shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED {
@@ -121,7 +143,6 @@ func (l *listener) listenResult() {
 	}
 }
 
-// TODO: Refactor the semantic so each step progresses the status by one step
 func (l *listener) handleExtract(dto DeployRequest, out chan <- DeployStepResult) {
 	result, _ := l.deploy_service.Extract(dto)
 	out <- result

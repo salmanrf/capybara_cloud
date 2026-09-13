@@ -12,7 +12,7 @@ type repository struct {
 }
 
 type ApplicationRepository interface {
-	FindOneWithProjectMember(database.FindOneApplicationWithProjectMemberParams) (*database.FindOneApplicationWithProjectMemberRow, error)
+	FindOneComplete(database.FindOneApplicationCompleteParams) (*database.FindOneApplicationCompleteRow, error)
 	UpsertConfig(database.CreateApplicationConfigParams) (*database.ApplicationConfig, error)
 	CreateApplication(database.CreateApplicationParams) (*database.Application, error)
 	UpdateOneApplication(database.UpdateOneApplicationParams) (*database.Application, error)
@@ -25,8 +25,8 @@ func NewRepository(ctx context.Context, queries *database.Queries) ApplicationRe
 	}
 }
 
-func (r *repository) FindOneWithProjectMember(params database.FindOneApplicationWithProjectMemberParams) (*database.FindOneApplicationWithProjectMemberRow, error) {
-	app_with_pm, err := r.queries.FindOneApplicationWithProjectMember(
+func (r *repository) FindOneComplete(params database.FindOneApplicationCompleteParams) (*database.FindOneApplicationCompleteRow, error) {
+	app_with_pm, err := r.queries.FindOneApplicationComplete(
 		r.ctx,
 		params,
 	)

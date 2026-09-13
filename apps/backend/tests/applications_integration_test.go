@@ -1,6 +1,7 @@
 package tests
 
 import (
+	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 )
 
 func TestCreateApplication(t *testing.T) {
+	locutils.CreateLogger()
 	application_service := &StubApplicationService{}
 	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
@@ -722,7 +724,7 @@ func TestFindOneApplication(t *testing.T) {
 				expected_app_uuid := pgtype.UUID{}
 				expected_app_uuid.Scan(expected_app_id)
 
-				application_service.Find_one_return = &database.FindOneApplicationWithProjectMemberRow{
+				application_service.Find_one_return = &database.FindOneApplicationCompleteRow{
 					AppID: expected_app_uuid,
 				}
 				
@@ -786,7 +788,7 @@ func TestFindOneApplication(t *testing.T) {
 				expected_app_uuid := pgtype.UUID{}
 				expected_app_uuid.Scan(expected_app_id)
 
-				application_service.Find_one_return = &database.FindOneApplicationWithProjectMemberRow{
+				application_service.Find_one_return = &database.FindOneApplicationCompleteRow{
 					AppID: expected_app_uuid,
 				}
 				

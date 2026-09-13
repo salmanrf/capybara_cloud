@@ -83,14 +83,6 @@ func TestCreateApplicationConfig(t *testing.T) {
 				"{}",
 			},
 			{
-				"empty variables",
-				`
-				{
-					"foo": "bar"
-				}
-				`,
-			},
-			{
 				"invalid variables 1",
 				`
 				{
@@ -319,6 +311,31 @@ func TestCreateApplicationConfig(t *testing.T) {
 					"AUTH0_CLIENT_SECRET": varv_22,
 				},
 			},
+			{
+				"missing variables",
+				"eb29b17d-04c3-4895-a170-930c36766df7",
+				`
+				{
+					"port": 3000
+				}
+				`,
+				3000,
+				"{}",
+				map[string]any{},
+			},
+			{
+				"empty variables",
+				"eb29b17d-04c3-4895-a170-930c36766df7",
+				`
+				{
+					"port": 3000,
+					"variables": {}
+				}
+				`,
+				3000,
+				"{}",
+				map[string]any{},
+			},
 		}
 
 		jwt_validator.validate_return = mock_user_id
@@ -336,7 +353,7 @@ func TestCreateApplicationConfig(t *testing.T) {
 					AppID: app_uuid,
 					AppCfgID: app_cfg_uuid,
 					VariablesJson: []byte(tt.expected_variables_json),
-					Port: int32(tt.expected_port),
+					Port: pgtype.Int4{Int32: int32(tt.expected_port), Valid: true},
 				}
 				
 				application_service.Create_config_return = expected_app_config

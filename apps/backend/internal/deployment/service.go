@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"os"
 	"os/exec"
@@ -13,9 +14,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/application"
 	masbro_worker "github.com/salmanrf/capybara-cloud/apps/backend/internal/masbro-worker"
-	config "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
+	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/docker"
@@ -30,6 +35,7 @@ type service struct {
 	port_service shared_deployment.PortAllocatorService
 	deployment_repository DeploymentRepository
 	deploy_chan chan DeployRequest
+	logger slog.Logger
 }	
 
 type Service interface {
@@ -53,7 +59,7 @@ func NewService(
 	deployment_repository DeploymentRepository,
 	deploy_chan chan DeployRequest,
 ) Service {
-	cfg := config.GetConfig()
+	cfg := locutils.GetConfig()
 	err := utils.EnsureDirExists(cfg.BASE_ARTIFACT_PATH)
 	if err != nil {
 		panic(err)
@@ -63,6 +69,8 @@ func NewService(
 		panic(err)
 	}
 
+	logger := locutils.Logger
+
 	return &service{
 		ctx,
 		docker_service,
@@ -71,11 +79,27 @@ func NewService(
 		port_service,
 		deployment_repository,
 		deploy_chan,
+		logger,
 	}
 }
 
 func (s *service) update(dep database.ApplicationDeployment) (*database.ApplicationDeployment, error) {
-	return nil, nil
+	params := database.UpdateDeploymentParams{
+		AppDpID: dep.AppDpID,
+		AppID: dep.AppID,
+		ArtifactsPath: dep.ArtifactsPath,
+		VariablesSnapshotJson: dep.VariablesSnapshotJson,
+		StorageService: dep.StorageService,
+		VersionNumber: dep.VersionNumber,
+		Status: dep.Status,
+		BuildPath: dep.BuildPath,
+		ContainerRegistry: dep.ContainerRegistry,
+		ContainerNamespace: dep.ContainerNamespace,
+		ContainerRepository: dep.ContainerRepository,
+		ContainerTag: dep.ContainerTag,
+	}
+	res, err := s.deployment_repository.Update(params)
+	return res, err
 }
 
 func (s *service) updateStatus(dep database.ApplicationDeployment) (*database.ApplicationDeployment, error) {
@@ -88,85 +112,456 @@ func (s *service) updateStatus(dep database.ApplicationDeployment) (*database.Ap
 }
 
 func (s *service) Deploy(user_id string, app_id string, bundle_file_headers *multipart.FileHeader, bundle_file multipart.File) (*database.ApplicationDeployment, error) {
-	config := config.GetConfig()
-	
-	app, err := s.app_service.FindOne(app_id, user_id)
+	config := locutils.GetConfig()
+
+	app, err := s.app_service.FindOneComplete(app_id, user_id)
 	if err != nil {
+		errmsg := errors.Join(errors.New("[Deploy] Unable to find application"), err)
+		s.logger.Error(errmsg.Error(), "user_id", user_id, "app_id", app_id)
 		return nil, err
 	}
-	if app == nil || !app.ApplicationConfig.AppCfgID.Valid {
+	if app == nil {
+		s.logger.Error("[Deploy] Application not found", "user_id", user_id, "app_id", app_id)
 		return nil, errors.New("not_found")
+	}
+	if !app.ApplicationConfig.AppCfgID.Valid {
+		s.logger.Error("[Deploy] Application config not found", "user_id", user_id, "app_id", app_id)
+		return nil, errors.New("config_not_found")
+	}
+	if !app.ProjectMember.ProjectID.Valid {
+		s.logger.Error("[Deploy] Permission denied, invalid project member", "user_id", user_id, "app_id", app_id)
+		return nil, errors.New("permission_denied")
 	}
 
 	artifact_path, err := saveDeployArtifacts(config, *app, bundle_file_headers, bundle_file)
 	if err != nil {
-		return nil, err
+		errmsg := errors.Join(errors.New("[Deploy] Unable to save deployment artifact"), err)
+		s.logger.Error(errmsg.Error(), "user_id", user_id, "app_id", app_id)
+		return nil, errmsg
 	}
 
 	next_version := int32(1)
 	current_dp, err := s.deployment_repository.FindCurrent(app_id)
 	if err != nil {
-		return nil, err
+		if err.Error() != "not_found" {
+			errmsg := errors.Join(errors.New("[Deploy] - Unable to find current deployment"), err)
+			s.logger.Error(errmsg.Error(), "user_id", user_id, "app_id", app_id)
+			return nil, errmsg
+		}
 	}
 	if current_dp != nil {
 		next_version = current_dp.VersionNumber + 1
 	}
 
+	container_tag := getContainerTag(database.ApplicationDeployment{
+		CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		VersionNumber: next_version,
+	})
+
 	create_dp_params := database.CreateApplicationDeploymentParams{
 		AppID: app.AppID,
 		ArtifactsPath: artifact_path,
-		BuildPath: "abcd",
+		BuildPath: getBuildDirPath(config, "localfs", app.Name),
 		VariablesSnapshotJson: app.ApplicationConfig.VariablesJson,
 		VersionNumber: int32(next_version),
 		StorageService: "localfs",
 		Status: shared_deployment.DEPLOY_STATUS_INITIATED,
+		ContainerRegistry: pgtype.Text{String: config.DOCKER_REGISTRY, Valid: true},
+		ContainerNamespace: pgtype.Text{String: config.DOCKER_NAMESPACE, Valid: true},
+		ContainerRepository: pgtype.Text{String: utils.Slugify(app.Name), Valid: true},
+		ContainerTag: pgtype.Text{String: container_tag, Valid: true},
 	}
 
 	app_deployment, err := s.deployment_repository.Create(create_dp_params)
 	if err != nil {
-		return nil, err
+		errmsg := errors.Join(errors.New("[Deploy] - Unable to create deployment"), err)
+		s.logger.Error(errmsg.Error(), "user_id", user_id, "app_id", app_id, "artifact_path", artifact_path)
+		return nil, errmsg
 	}
 
 	app_dto := database.Application{
 		AppID:     app.AppID,
-		ProjectID: app.PmProjectID,
+		ProjectID: app.ProjectID,
 		Type:      app.Type,
 		Name:      app.Name,
 		CreatedAt: app.CreatedAt,
 		UpdatedAt: app.UpdatedAt,
 	}
 
-	app_config_dto := database.ApplicationConfig{
-		AppCfgID:      app.ApplicationConfig.AppCfgID,
-		AppID:         app.AppID,
-		VariablesJson: app.ApplicationConfig.VariablesJson,
-		CreatedAt:     app.ApplicationConfig.CreatedAt,
-		UpdatedAt:     app.ApplicationConfig.UpdatedAt,
-	}
-
 	deploy_req := DeployRequest{
 		ApplicationDto:    app_dto,
-		ApplicationConfig: app_config_dto,
+		ApplicationConfig: app.ApplicationConfig,
 		DeploymentDto:     *app_deployment,
 	}
 
+	s.logger.Info(
+		"[Deploy] - Deployment created successfully, passing to listener",
+		"user_id", user_id,
+		"app_id", app_id,
+		"deployment_id", app_deployment.AppDpID,
+		"artifact_path", artifact_path,
+	)
 	s.deploy_chan <- deploy_req
 
 	return app_deployment, nil
 }
 
-func (s *service) createInstance(dto DeployRequest) (*database.DeploymentInstance, error) {
-	app := database.FindOneApplicationWithProjectMemberRow{
-		Type: dto.ApplicationDto.Type,
-		Name: dto.ApplicationDto.Name,
+func (s *service) Extract(dto DeployRequest) (res DeployStepResult, err error) {
+	app := dto.ApplicationDto
+	dep := dto.DeploymentDto
+
+	res = DeployStepResult{
+		ApplicationDto: dto.ApplicationDto,
+		ApplicationConfig: dto.ApplicationConfig,
+		DeploymentDto: dep,
+		DeploymentError: nil,
 	}
-	container_name := getContainerName(app)
+	defer func() { res.DeploymentDto = dep }()
+
+	build_path := dep.BuildPath
+	err = utils.EnsureDirExists(build_path)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Extract] - Unable to create build directory"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"deployment_id", dep.AppDpID,
+			"build_path", build_path,
+			"artifact_path", dep.ArtifactsPath,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	tar, err := exec.LookPath("tar")
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Extract] - Unable to find tar executable"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"deployment_id", dep.AppDpID,
+			"build_path", build_path,
+			"artifact_path", dep.ArtifactsPath,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	cmd := exec.Command(tar, "-xzvf", dep.ArtifactsPath, "-C", build_path)
+	extract_out := bytes.NewBuffer([]byte{})
+	cmd.Stdout = extract_out
+	cmd.Stderr = extract_out
+	if err := cmd.Run(); err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Extract] - Unable to extract bundle file"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"deployment_id", dep.AppDpID,
+			"build_path", build_path,
+			"artifact_path", dep.ArtifactsPath,
+			"tar_output", extract_out.String(),
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	s.logger.Info(
+		"[Deploy Step - Extract] - Bundle extracted successfully",
+		"app_id", app.AppID,
+		"deployment_id", dep.AppDpID,
+		"build_path", build_path,
+		"artifact_path", dep.ArtifactsPath,
+	)
+
+	return res, nil
+}
+
+func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
+	cfg := locutils.GetConfig()
+
+	app := dto.ApplicationDto
+	dep := dto.DeploymentDto
+	res.ApplicationDto = dto.ApplicationDto
+	res.ApplicationConfig = dto.ApplicationConfig
+	defer func() { res.DeploymentDto = dep }()
+
+	if !dep.ContainerTag.Valid {
+		dep.ContainerRegistry = pgtype.Text{String: cfg.DOCKER_REGISTRY, Valid: true}
+		dep.ContainerNamespace = pgtype.Text{String: cfg.DOCKER_NAMESPACE, Valid: true}
+		dep.ContainerRepository = pgtype.Text{String: utils.Slugify(app.Name), Valid: true}
+		dep.ContainerTag = pgtype.Text{String: getContainerTag(dep), Valid: true}
+	}
+	docker_full_image_reference := utils.FullImageRef(dep)
+
+	if _, err := os.ReadDir(dep.BuildPath); err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Build] - Unable to locate build directory"), 
+			err,
+		) 
+		s.logger.Error(
+			errmsg.Error(), 
+			"app_id", app.AppID, 
+			"deployment_id", dep.AppDpID, 
+			"build_path", dep.BuildPath,
+			"image", docker_full_image_reference,
+		)
+		res.DeploymentError = err
+		return res, res.DeploymentError
+	}
+
+	defer func () {
+		err := os.RemoveAll(dep.BuildPath)
+		if err != nil {
+			fmt.Println("[Build] Cleanup: unexpected error", err)
+		}
+	}()
+
+	dockerfile_template_path := path.Join(locutils.GetConfig().DOCKER_TEMPLATES_DIR, "Dockerfile")
+	template_dockerfile, err := os.OpenFile(dockerfile_template_path, os.O_RDONLY, 0)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Build] - Unable to locate template Dockerfile"), 
+			err,
+		) 
+		s.logger.Error(
+			errmsg.Error(), 
+			"app_id", app.AppID, 
+			"deployment_id", dep.AppDpID, 
+			"build_path", dep.BuildPath,
+			"image", docker_full_image_reference,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	dockerfile_path := path.Join(dep.BuildPath, "Dockerfile")
+	dockerfile, err := os.OpenFile(dockerfile_path, os.O_CREATE | os.O_WRONLY, 0o774)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Build] - Unable to read Dockerfile - Unable to read Dockerfile"), 
+			err,
+		) 
+		s.logger.Error(
+			errmsg.Error(), 
+			"app_id", app.AppID, 
+			"deployment_id", dep.AppDpID, 
+			"build_path", dep.BuildPath,
+			"image", docker_full_image_reference,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	_, err = io.Copy(dockerfile, template_dockerfile)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Build] - Unable to copy Dockerfile"), 
+			err,
+		) 
+		s.logger.Error(
+			errmsg.Error(), 
+			"app_id", app.AppID, 
+			"deployment_id", dep.AppDpID, 
+			"build_path", dep.BuildPath,
+			"image", docker_full_image_reference,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	build_params := docker.DockerBuildDto{ContextPath: dep.BuildPath, Tag: docker_full_image_reference}
+	err = s.docker.Build(build_params)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Build] - Unable to build docker image"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"deployment_id", dep.AppDpID,
+			"build_path", dep.BuildPath,
+			"image", docker_full_image_reference,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	s.logger.Info(
+		"[Deploy Step - Build] - Docker image built successfully",
+		"app_id", app.AppID,
+		"deployment_id", dep.AppDpID,
+		"build_path", dep.BuildPath,
+		"image", docker_full_image_reference,
+	)
+
+	return res, nil
+}
+
+func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
+	app := dto.ApplicationDto
+	dep := dto.DeploymentDto
+	res.ApplicationDto = dto.ApplicationDto
+	res.ApplicationConfig = dto.ApplicationConfig
+	res.DeploymentDto = dep
+
+	repotag := fmt.Sprintf("%s:%s", dep.ContainerRepository.String, dep.ContainerTag.String)
+	image := utils.FullImageRef(dep)
+
+	s.logger.Info(
+		"[Deploy Step - Push] Pushing image",
+		"app_id", app.AppID,
+		"dep_id", dep.AppDpID,
+		"image", image,
+	)
+
+	dockerimg, err := s.docker.FindOneImageByRepoTag(repotag)
+	if err != nil || dockerimg == nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Push] Unable to find docker image"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"deployment_id", dep.AppDpID,
+			"image", image,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	err = s.docker.Push(image)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Push] Unable to push docker image"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"deployment_id", dep.AppDpID,
+			"image", image,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	s.logger.Info(
+		"[Deploy Step - Push] Docker image pushed successfully",
+		"app_id", app.AppID,
+		"deployment_id", dep.AppDpID,
+		"image", image,
+	)
+
+	return res, nil
+}
+
+func (s *service) Start(dto DeployRequest) (DeployStepResult, error) {
+	app := dto.ApplicationDto
+	dep := dto.DeploymentDto
+	cfg := dto.ApplicationConfig
+	res := DeployStepResult{
+		ApplicationDto: app,
+		ApplicationConfig: cfg,
+		DeploymentDto: dep,
+		DeploymentError: nil,
+	}
+	create_ins_params := database.CreateDeploymentInstanceParams{
+		AppID: app.AppID,
+		DeploymentID: dep.AppDpID,
+		ContainerName: getContainerName(dep),
+		ContainerPort: cfg.Port.Int32,
+		Status: shared_deployment.DEPLOY_INSTANCE_STATUS_STOPPED,
+	}
+
+	s.logger.Info(
+		"[Deploy Step - Start] Starting Container",
+		"app_id", app.AppID,
+		"dep_id", dep.AppDpID,
+		"container", create_ins_params.ContainerName,
+		"port", create_ins_params.ContainerPort,
+	)
+	
+	ins, err := s.deployment_repository.CreateInstance(create_ins_params)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Start] Unable to create deployment instance"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"dep_id", dep.AppDpID,
+			"container", create_ins_params.ContainerName,
+			"port", create_ins_params.ContainerPort,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	start_res, err := s.masbro_service.Start(dto, *ins)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Start] Unable to start container"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"dep_id", dep.AppDpID,
+			"container", create_ins_params.ContainerName,
+			"port", create_ins_params.ContainerPort,
+		)
+		res.DeploymentError = errmsg
+		return res, res.DeploymentError
+	}
+
+	update_params := database.UpdateDeploymentInstanceParams{
+		AppID: start_res.AppID,
+		DeploymentID: start_res.DeploymentID,
+		InstanceID: start_res.InstanceID,
+		Status: start_res.Status,
+		ContainerName: start_res.ContainerName,
+		HostPort: start_res.HostPort,
+		ContainerPort: start_res.ContainerPort,
+	}
+	ins, err = s.deployment_repository.UpdateInstance(update_params)
+	if err != nil {
+		errmsg := errors.Join(
+			errors.New("[Deploy Step - Start] Unable to update deplyment instance"),
+			err,
+		)
+		s.logger.Error(
+			errmsg.Error(),
+			"app_id", app.AppID,
+			"dep_id", dep.AppDpID,
+			"container", create_ins_params.ContainerName,
+			"port", create_ins_params.ContainerPort,
+		)
+		res.DeploymentError = errmsg
+	}
+
+	return res, nil
+}
+
+func (s *service) createInstance(dto DeployRequest) (*database.DeploymentInstance, error) {
+	container_name := getContainerName(dto.DeploymentDto)
 
 	create_params := database.CreateDeploymentInstanceParams{
 		AppID: dto.ApplicationDto.AppID,
 		DeploymentID: dto.DeploymentDto.AppDpID,
 		ContainerName: container_name,
-		ContainerPort: dto.ApplicationConfig.Port,
+		ContainerPort: dto.ApplicationConfig.Port.Int32,
 	}
 
 	instance, err := s.deployment_repository.CreateInstance(create_params)
@@ -195,230 +590,15 @@ func (s *service) updateInstance(ins *database.DeploymentInstance) (*database.De
 	return instance, nil
 }
 
-func (s *service) Extract(dto DeployRequest) (res DeployStepResult, err error) {
-	app := dto.ApplicationDto
-	dep := dto.DeploymentDto
-
-	res = DeployStepResult{
-		ApplicationDto: dto.ApplicationDto,
-		ApplicationConfig: dto.ApplicationConfig,
-		DeploymentDto: dep,
-		DeploymentError: nil,
-	}
-	defer func() { res.DeploymentDto = dep }()
-	dep.Status = -1 * shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
-
-	cfg := config.GetConfig()
-
-	build_path := getBuildDirPath(cfg, "localfs", app.Name)
-	err = utils.EnsureDirExists(build_path)
-	if err != nil {
-		fmt.Println("Unable to create build directory")
-		return res, err
-	}
-
-	tar, err := exec.LookPath("tar")
-	if err != nil {
-		fmt.Println("Unable to find tar executable")
-		return res, err
-	}
-	cmd := exec.Command(tar, "-xzvf", dep.ArtifactsPath, "-C", build_path)
-	extract_out := bytes.NewBuffer([]byte{})
-	cmd.Stdout = extract_out
-	if err := cmd.Run(); err != nil {
-		fmt.Println(extract_out)
-		fmt.Println("Error extracting bundle file", err)
-		return res, err
-	}
-
-	dep.Status = shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
-
-	return res, nil
+func getContainerTag(dep database.ApplicationDeployment) string {
+	return fmt.Sprintf("%03d-%s", dep.VersionNumber, utils.DockerSafeDateString(dep.CreatedAt.Time))
 }
 
-func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
-	cfg := config.GetConfig()
-
-	dep := dto.DeploymentDto
-	res.ApplicationDto = dto.ApplicationDto
-	res.ApplicationConfig = dto.ApplicationConfig
-	defer func() { res.DeploymentDto = dep }()
-	if _, err := os.ReadDir(dep.BuildPath); err != nil {
-		dep.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
-		res.DeploymentError = errors.New("Unable to locate build directory")
-		return res, res.DeploymentError
-	}
-
-	defer func () {
-		err := os.RemoveAll(dep.BuildPath)
-		if err != nil {
-			fmt.Println("[Build] Cleanup: unexpected error", err)
-		}
-	}()
-
-	wd, _ := os.Getwd()
-	dockerfile_template_path := path.Join(wd, "templates", "Dockerfile")
-	template_dockerfile, err := os.OpenFile(dockerfile_template_path, os.O_RDONLY, 0)
-	if err != nil {
-		dep.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
-		res.DeploymentError = errors.New("Unable to locate template Dockerfile")
-		return res, res.DeploymentError
-	}
-
-	dockerfile_path := path.Join(dep.BuildPath, "Dockerfile")
-	dockerfile, err := os.OpenFile(dockerfile_path, os.O_CREATE | os.O_WRONLY, 0o774)
-	if err != nil {
-		dep.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
-		res.DeploymentError = errors.New("Unable to locate build directory")
-		return res, res.DeploymentError
-	}
-
-	_, err = io.Copy(dockerfile, template_dockerfile)
-	if err != nil {
-		dep.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
-		res.DeploymentError = errors.New("Unable to copy Dockerfile")
-		return res, res.DeploymentError
-	}
-
-	docker_full_image_reference := getContainerImageName(dto.ApplicationDto, dto.DeploymentDto)
-
-	docker, err := exec.LookPath("docker")
-	if err != nil {
-		dep.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
-		res.DeploymentError = errors.New("Unable to locate docker executable")
-		return res, res.DeploymentError
-	}
-
-	docker_build_ctx_path := dep.BuildPath
-	docker_build_cmd := exec.Command(docker, "build", docker_build_ctx_path, "-t", docker_full_image_reference)
-
-	stdout, _ := docker_build_cmd.StderrPipe()
-	go func () {
-		temp := make([]byte, 1024)
-		n, err := stdout.Read(temp)
-		for ; err == nil; {
-			fmt.Println(string(temp[:n]))
-			n, err = stdout.Read(temp)
-		}
-	}()
-
-	fmt.Printf("Starting docker build in directory: %s\n", dep.BuildPath)
-	fmt.Printf("Running: %s ...\n", docker_build_cmd.String())
-	err = docker_build_cmd.Run()
-	if err != nil {
-		dep.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
-		res.DeploymentError = errors.New("Unable to build docker image")
-		return res, res.DeploymentError
-	}
-
-	dep.Status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_BUILT
-	dep.ContainerImgName = docker_full_image_reference
-	dep.ContainerRegistry = cfg.DOCKER_REGISTRY
-
-	return res, nil
+func getContainerName(dep database.ApplicationDeployment) string {
+	return fmt.Sprintf("%s-%s-%s", dep.ContainerRepository.String, dep.ContainerTag.String, uuid.New())
 }
 
-func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
-	new_deployment := dto.DeploymentDto
-	res.ApplicationDto = dto.ApplicationDto
-	res.ApplicationConfig = dto.ApplicationConfig
-	defer func() { res.DeploymentDto = new_deployment }()
-
-	repotag := utils.GetDockerRepoTagFromFullName(dto.DeploymentDto.ContainerImgName)
-
-	dockerimg, err := s.docker.FindOneImageByName(repotag)
-	if err != nil || dockerimg == nil {
-		new_deployment.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
-		return res, errors.New("image_not_found")
-	}
-
-	err = s.docker.Push(repotag)
-	if err != nil {
-		err_msg := fmt.Sprintf("image_push_failed: %s", err.Error())
-		new_deployment.Status = -shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
-		return res, errors.New(err_msg)
-	}
-
-	new_deployment.Status = shared_deployment.DEPLOY_STATUS_BUILD_IMAGE_PUSHED
-
-	return res, err
-}
-
-func (s *service) Start(dto DeployRequest) (DeployStepResult, error) {
-	app := dto.ApplicationDto
-	dep := dto.DeploymentDto
-	cfg := dto.ApplicationConfig
-	res := DeployStepResult{
-		ApplicationDto: app,
-		ApplicationConfig: cfg,
-		DeploymentDto: dep,
-		DeploymentError: nil,
-	}
-	create_ins_params := database.CreateDeploymentInstanceParams{
-		AppID: app.AppID,
-		DeploymentID: dep.AppDpID,
-		ContainerName: getContainerName(
-			database.FindOneApplicationWithProjectMemberRow{
-				Name: app.Name,
-				Type: app.Type,
-			},
-		),
-		Status: shared_deployment.DEPLOY_INSTANCE_STATUS_STOPPED,
-	}
-	ins, err := s.deployment_repository.CreateInstance(create_ins_params)
-	if err != nil {
-		res.DeploymentError = err
-		return res, nil
-	}
-
-	start_res, err := s.masbro_service.Start(dto, *ins)
-	if err != nil {
-		res.DeploymentError = err
-		return res, nil
-	}
-
-	update_params := database.UpdateDeploymentInstanceParams{
-		AppID: start_res.AppID,
-		DeploymentID: start_res.DeploymentID,
-		InstanceID: start_res.InstanceID,
-		Status: start_res.Status,
-		ContainerName: start_res.ContainerName,
-		HostPort: start_res.HostPort,
-		ContainerPort: start_res.ContainerPort,
-	}
-	ins, err = s.deployment_repository.UpdateInstance(update_params)
-	res.DeploymentError = err
-
-	return res, nil
-}
-
-func getContainerImageName(app database.Application, dep database.ApplicationDeployment) string {
-	cfg := config.GetConfig()
-
-	regspace := fmt.Sprintf("docker.io/%s", cfg.DOCKER_REGISTRY)
-	repo := utils.Slugify(app.Name)
-	tag := fmt.Sprintf(
-		":%s-%03s", 
-		utils.DockerSafeDateString(dep.CreatedAt.Time),
-		fmt.Sprintf("%d", dep.VersionNumber),
-	)
-
-	return fmt.Sprintf("%s/%s%s", regspace, repo, tag)
-}
-
-func getContainerName(app database.FindOneApplicationWithProjectMemberRow) string {
-	now := time.Now()
-	dateformatted := now.Format((time.DateOnly))
-	timeformatted := strings.ReplaceAll(now.Format(time.TimeOnly), ":", "-")
-	deploy_datestr := fmt.Sprintf("%s-%s", dateformatted, timeformatted)
-	appnameslug := utils.Slugify(app.Name)
-
-	full_container_name := fmt.Sprintf("%s-%s-%s", app.Type, appnameslug, deploy_datestr)
-
-	return full_container_name
-}
-
-func getBuildDirPath(config config.Config, storage_service string, app_name string) string {
+func getBuildDirPath(config locutils.Config, storage_service string, app_name string) string {
 	_ = storage_service
 
 	now := time.Now()
@@ -428,11 +608,11 @@ func getBuildDirPath(config config.Config, storage_service string, app_name stri
 	appnameslug := utils.Slugify(app_name)
 
 	full_path := fmt.Sprintf("%s/build-%s-%s", config.BASE_BUILD_PATH, appnameslug, deploy_datestr) 
-	
+
 	return full_path
 }
 
-func getArtifactDirPath(config config.Config, storage_service string, app database.FindOneApplicationWithProjectMemberRow) string {
+func getArtifactDirPath(config locutils.Config, storage_service string, app database.FindOneApplicationCompleteRow) string {
 	_ = storage_service
 
 	now := time.Now()
@@ -447,8 +627,8 @@ func getArtifactDirPath(config config.Config, storage_service string, app databa
 }
 
 func saveDeployArtifacts(
-	config config.Config,
-	app database.FindOneApplicationWithProjectMemberRow, 
+	config locutils.Config,
+	app database.FindOneApplicationCompleteRow, 
 	fileheaders *multipart.FileHeader,
 	bundle_file multipart.File,
 ) (string, error) { 

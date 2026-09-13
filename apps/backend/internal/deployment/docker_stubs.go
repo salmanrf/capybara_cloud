@@ -24,6 +24,10 @@ type StubDocker struct {
 	run_err error
 	run_return_n_calls int
 	run_return_call_args []docker.DockerRunDto
+
+	build_return error
+	build_n_calls int
+	build_call_args []docker.DockerBuildDto
 }
 
 func (s *StubDocker) Clear() {
@@ -43,9 +47,13 @@ func (s *StubDocker) Clear() {
 	s.run_return = nil
 	s.run_return_n_calls = 0
 	s.run_return_call_args = nil
+
+	s.build_return = nil
+	s.build_n_calls = 0
+	s.build_call_args = nil
 }
 
-func (s *StubDocker) FindOneImageByName(name string) (*image.Summary, error) {
+func (s *StubDocker) FindOneImageByRepoTag(name string) (*image.Summary, error) {
 	s.find_one_image_by_name_return_n_calls += 1
 	s.find_one_image_by_name_return_call_args = append(s.find_one_image_by_name_return_call_args, name)
 	
@@ -71,4 +79,11 @@ func (s *StubDocker) Run(dto docker.DockerRunDto) (*docker.DockerRunResult, erro
 	s.run_return_call_args = append(s.run_return_call_args, dto)
 
 	return s.run_return, s.run_err
+}
+
+func (s *StubDocker) Build(dto docker.DockerBuildDto) error {
+	s.build_n_calls += 1
+	s.build_call_args = append(s.build_call_args, dto)
+
+	return s.build_return
 }

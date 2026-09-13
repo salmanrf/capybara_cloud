@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -9,11 +11,13 @@ import (
 
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/application"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
+	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
 type app_handler struct {
 	app_service application.Service
+	logger slog.Logger
 }
 
 type AppHandlers interface {
@@ -26,8 +30,11 @@ type AppHandlers interface {
 }
 
 func NewAppHandlers(app_service application.Service) AppHandlers {
+	logger := locutils.Logger
+	
 	return &app_handler{
 		app_service,
+		logger,
 	}
 }
 
@@ -35,7 +42,7 @@ func (h *app_handler) HandleFindOne(w http.ResponseWriter, r *http.Request) {
 	app_id := r.PathValue("app_id")
 	user_id, _ := r.Context().Value("user_id").(string)
 
-	app, err :=  h.app_service.FindOne(app_id, user_id)
+	app, err :=  h.app_service.FindOneComplete(app_id, user_id)
 
 	if err != nil {
 		errmsg := err.Error()
@@ -93,6 +100,14 @@ func (h *app_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
+		h.logger.Error(
+			errors.Join(
+				errors.New("[HandleCreate] Unable to parse request"),
+				err,
+			).Error(),
+			"user_id", user_id, 
+			"body", r.Body,
+		)
 		utils.ResponseWithError(
 			w,
 			http.StatusUnprocessableEntity,
@@ -104,6 +119,14 @@ func (h *app_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	_, err := body.Validate()
 	if err != nil {
+		h.logger.Error(
+			errors.Join(
+				errors.New("[HandleCreate] Unable to validate request"),
+				err,
+			).Error(),
+			"user_id", user_id, 
+			"body", r.Body,
+		)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -114,6 +137,13 @@ func (h *app_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		h.logger.Error(
+			errors.Join(
+				errors.New("[HandleCreate] Unable to create application"),
+				err,
+			).Error(),
+			"user_id", user_id, 
+		)
 		if err.Error() == "permission_denied" {
 			utils.ResponseWithError(
 				w, 
@@ -235,6 +265,9 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
+	if body.Variables == nil {
+		body.Variables = map[string]any{}
+	}
 
 	app_cfg, err := h.app_service.CreateConfig(
 		app_id,
@@ -274,7 +307,7 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 	app_config_response := dto.ApplicationConfigResponse{
 		AppCfgID: app_cfg.AppCfgID.String(),
 		AppID: app_cfg.AppID.String(),
-		Port: int(app_cfg.Port),
+		Port: int(app_cfg.Port.Int32),
 		VariablesJson: string(app_cfg.VariablesJson),
 		ConfigVariables: body.Variables,
 		CreatedAt: app_cfg.CreatedAt.Time,
