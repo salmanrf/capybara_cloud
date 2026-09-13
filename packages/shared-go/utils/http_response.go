@@ -40,7 +40,6 @@ func ResponseWithSuccess[T any](w http.ResponseWriter, status int, data *T, mess
 
 	if err := encoder.Encode(response_body); err != nil {
 		ResponseWithError(w, http.StatusInternalServerError, nil, "")
-		
 		return err
 	}
 
