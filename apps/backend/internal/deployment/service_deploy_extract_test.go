@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/application"
 	config "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
@@ -31,6 +32,25 @@ func TestDeployExtract(t *testing.T) {
 		deployment_repository,
 		make(chan DeployRequest, 1),
 	)
+
+	// * For inspecting the content of a tarball
+	// * Use output from tar to compare with ReadDir 
+	/* Sample output:
+		./
+		./d.txt
+		./b.txt
+		./a.txt
+		./c.txt
+	*/
+	tar, err := exec.LookPath("tar")
+	if err != nil {
+		t.Fatalf("got error %v, want nil", err)
+	}
+
+	pwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("should perform artifact extraction when status is DEPLOY_STATUS_INITIATED = 1", func (t *testing.T) {
 		cfg := config.GetConfig()
@@ -65,26 +85,6 @@ func TestDeployExtract(t *testing.T) {
 			},
 		}
 
-		pwd, err := os.Getwd()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// * For inspecting the content of a tarball
-		// * Use output from tar to compare with ReadDir 
-		/* Sample output:
-			./
-			./d.txt
-			./b.txt
-			./a.txt
-			./c.txt
-		*/
-		tar, err := exec.LookPath("tar")
-		if err != nil {
-			t.Fatalf("got error %v, want nil", err)
-		}
-
-
 		// * Cleanup build directories
 		defer func () {
 			os.Remove(cfg.BASE_BUILD_PATH)
@@ -99,7 +99,8 @@ func TestDeployExtract(t *testing.T) {
 					Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 				}	
 
-				want_build_path := getBuildDirPath(cfg, "localfs", mock_app.Name)
+				// * Fixed path, not derived from getBuildDirPath: Extract must use dep.BuildPath as-is
+				want_build_path := path.Join(cfg.BASE_BUILD_PATH, "build-"+tt.name+"-"+tt.tid.String())
 				want_file_count := 0
 
 				// * Store output of tar -tzf
@@ -152,7 +153,7 @@ func TestDeployExtract(t *testing.T) {
 					VersionNumber: 1,
 				}
 				mock_app_cfg := database.ApplicationConfig{
-					Port: 3000,
+					Port: pgtype.Int4{Int32: 3000, Valid: true},
 				}
 
 				deploy_request := DeployRequest{
@@ -167,8 +168,9 @@ func TestDeployExtract(t *testing.T) {
 				}
 
 				dep := res.DeploymentDto
+				// ? Should let listener progress/update the status
 				got_new_status := dep.Status
-				want_new_status := shared_deployment.DEPLOY_STATUS_BUILD_EXTRACTED
+				want_new_status := mock_dp.Status
 
 				if got_new_status != int32(want_new_status) {
 					t.Errorf("got new deployment status %d, want %d", got_new_status, want_new_status)

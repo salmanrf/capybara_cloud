@@ -6,9 +6,13 @@ INSERT INTO "application_deployments" (
   variables_snapshot_json,
   version_number,
   status,
-  storage_service
+  storage_service,
+  container_registry,
+  container_namespace,
+  container_repository,
+  container_tag
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: FindCurrentDeployment :one
@@ -17,7 +21,10 @@ SELECT
 FROM 
   "application_deployments" AS AD
 WHERE 
-  AD.app_id = $1;
+  AD.app_id = $1
+ORDER BY
+  AD.version_number DESC
+LIMIT 1;
 
 -- name: CreateDeploymentInstance :one
 INSERT INTO "deployment_instances" (
@@ -59,9 +66,10 @@ SET
   version_number = $6,
   status = $7,
   build_path = $8,
-  container_img_name = $9,
-  container_registry = $10,
-  build_path = $11,
+  container_registry = $9,
+  container_namespace = $10,
+  container_repository = $11,
+  container_tag = $12,
   updated_at = NOW()
 WHERE app_dp_id = $1
 RETURNING *;

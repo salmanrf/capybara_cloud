@@ -3,7 +3,8 @@ package deployment
 import (
 	"context"
 	"errors"
-	"strings"
+	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,7 +13,6 @@ import (
 	config "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
-	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
 func TestDeployStart(t *testing.T) {
@@ -20,7 +20,8 @@ func TestDeployStart(t *testing.T) {
 	deployment_repository := &StubAppDeploymentRepository{}
 
 	cfg := config.GetConfig()
-	cfg.DOCKER_REGISTRY = "salmanrf"
+	cfg.DOCKER_REGISTRY = "docker.io"
+	cfg.DOCKER_NAMESPACE = "salmanrf"
 	cfg.BASE_BUILD_PATH = "/tmp/masmasbro/builds"
 	cfg.BASE_ARTIFACT_PATH = "/tmp/masmasbro/artifacts"
 	config.SetConfig(cfg)
@@ -59,8 +60,8 @@ func TestDeployStart(t *testing.T) {
 		if got_error == nil {
 			t.Fatalf("got error '%v', want '%v'", got_error, want_error)
 		}
-		if got_error.Error() != want_error.Error() {
-			t.Errorf("got error '%v', want '%v'", got_error, want_error)
+		if !errors.Is(got_error, want_error) {
+			t.Errorf("got error '%v', want wrapping '%v'", got_error, want_error)
 		}
 
 		got_create_ins_called := deployment_repository.create_instance_n_calls
@@ -84,15 +85,19 @@ func TestDeployStart(t *testing.T) {
 		ins_id.Scan(uuid.New().String())
 		mock_dp := database.ApplicationDeployment{
 			AppDpID: dep_id,
+			ContainerRegistry: pgtype.Text{String: "docker.io", Valid: true},
+			ContainerRepository: pgtype.Text{String: "masbro-cloud", Valid: true},
+			ContainerTag: pgtype.Text{String: "001-2026-08-09-10-11-12", Valid: true},
 		}
 		mock_app := database.Application{
 			AppID: app_id,
 			Name: "masbro-cloud",
 			Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
 		}
+		mock_cfg := database.ApplicationConfig{Port: pgtype.Int4{Int32: 8888, Valid: true}}
 		deploy_req := DeployRequest{
 			ApplicationDto: mock_app,
-			ApplicationConfig: database.ApplicationConfig{},
+			ApplicationConfig: mock_cfg,
 			DeploymentDto: mock_dp,
 		}
 
@@ -110,21 +115,21 @@ func TestDeployStart(t *testing.T) {
 		want_create_ins_params := database.CreateDeploymentInstanceParams{
 			AppID: mock_app.AppID,
 			DeploymentID: mock_dp.AppDpID,
+			ContainerPort: mock_cfg.Port.Int32,
 		}
 		got_create_ins_params := deployment_repository.create_instance_call_args[0]
-		want_slugified_app_name := utils.Slugify(mock_app.Name)
-		want_app_type := shared_deployment.APP_TYPE_NODEJS_CONTAINER
 		if got_create_ins_params.AppID.String() != want_create_ins_params.AppID.String() {
 			t.Errorf("got create instance called with app id '%v', want '%v'", got_create_ins_params.AppID, want_create_ins_params.AppID)
 		}
 		if got_create_ins_params.DeploymentID.String() != want_create_ins_params.DeploymentID.String() {
 			t.Errorf("got create instance called with dep id '%v', want '%v'", got_create_ins_params.DeploymentID, want_create_ins_params.DeploymentID)
 		}
-		if !strings.Contains(got_create_ins_params.ContainerName, want_app_type)  {
-			t.Errorf("got create instance called with container name '%v', want containing '%v'", got_create_ins_params.ContainerName, want_app_type)
+		want_crate_ins_ct_pattern := regexp.MustCompile(fmt.Sprintf("%s-%s-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", mock_dp.ContainerRepository.String, mock_dp.ContainerTag.String, ))
+		if !want_crate_ins_ct_pattern.Match([]byte(got_create_ins_params.ContainerName)) {
+			t.Errorf("got create instance called with container name '%v', want matching '%s'", got_create_ins_params.ContainerName, want_crate_ins_ct_pattern.String())
 		}
-		if !strings.Contains(got_create_ins_params.ContainerName, want_slugified_app_name)  {
-			t.Errorf("got create instance called with container name '%v', want containing '%v'", got_create_ins_params.ContainerName, want_slugified_app_name)
+		if got_create_ins_params.ContainerPort != want_create_ins_params.ContainerPort {
+			t.Errorf("got create instance called with container port '%v', want '%v'", got_create_ins_params.ContainerPort, want_create_ins_params.ContainerPort)
 		}
 		if got_create_ins_params.Status != want_create_ins_params.Status {
 			t.Errorf("got create instance called with status '%v', want '%v'", got_create_ins_params.Status, want_create_ins_params.Status)
@@ -153,8 +158,8 @@ func TestDeployStart(t *testing.T) {
 		if got_error == nil {
 			t.Fatalf("got error '%v', want '%v'", got_error, want_error)
 		}
-		if got_error.Error() != want_error.Error() {
-			t.Errorf("got error '%v', want '%v'", got_error, want_error)
+		if !errors.Is(got_error, want_error) {
+			t.Errorf("got error '%v', want wrapping '%v'", got_error, want_error)
 		}
 
 		got_create_ins_called := deployment_repository.create_instance_n_calls
@@ -193,8 +198,8 @@ func TestDeployStart(t *testing.T) {
 		if got_error == nil {
 			t.Fatalf("got error '%v', want '%v'", got_error, want_error)
 		}
-		if got_error.Error() != want_error.Error() {
-			t.Errorf("got error '%v', want '%v'", got_error, want_error)
+		if !errors.Is(got_error, want_error) {
+			t.Errorf("got error '%v', want wrapping '%v'", got_error, want_error)
 		}
 
 		got_create_ins_called := deployment_repository.create_instance_n_calls

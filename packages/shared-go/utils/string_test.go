@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 )
 
 func TestStringSlugify(t *testing.T) {
@@ -77,28 +80,16 @@ func TestDockerSafeDateString(t *testing.T) {
 	}
 }
 
-func TestGetDockerRepoTagFromFullName(t *testing.T) {
-	now := time.Now()
-	
-	tests := []struct{
-		full_name string
-		standardized string
-	}{
-		{"docker.io/abcd/mrfresh-gallery:101", "mrfresh-gallery:101"},
-		{
-			fmt.Sprintf("masbro-ecs.io/masmasbro/mr-capybro:%s", now), 
-			fmt.Sprintf("mr-capybro:%s", now),
-		},
-		{"sophia-cloud-services:zsh-5", "sophia-cloud-services:zsh-5"},
+func TestFullImageRef(t *testing.T) {
+	dep := database.ApplicationDeployment{
+		ContainerRegistry:   pgtype.Text{String: "docker.io", Valid: true},
+		ContainerNamespace:  pgtype.Text{String: "capybaracloud", Valid: true},
+		ContainerRepository: pgtype.Text{String: "masbro", Valid: true},
+		ContainerTag:        pgtype.Text{String: "2026-09-12-10-00-00-001", Valid: true},
 	}
-
-	for _, tt := range tests {
-		t.Run("should strip docker registry", func (t *testing.T) {
-			got_std := GetDockerRepoTagFromFullName(tt.full_name)
-			want_std := tt.standardized
-			if got_std != want_std {
-				t.Errorf("got repo tag '%s', want '%s'", got_std, want_std)
-			}
-		})
+	got := FullImageRef(dep)
+	want := "docker.io/capybaracloud/masbro:2026-09-12-10-00-00-001"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
