@@ -87,11 +87,9 @@ func (dto *CreateApplicationConfigDto) Validate() (bool, error) {
 	valid := true
 	var validation_errors error = nil
 
-	keyc := 0
 	for key, val := range dto.Variables {
 		switch t := val.(type) {
 		case string, float32, float64, int:
-			keyc += 1
 		default:
 			validation_errors = errors.Join(
 				validation_errors,
@@ -100,14 +98,6 @@ func (dto *CreateApplicationConfigDto) Validate() (bool, error) {
 			valid = false
 		}
 	}
-	if keyc == 0 {
-		validation_errors = errors.Join(
-			validation_errors, 
-			errors.New("config variables can't be an empty map"),
-		)
-		valid = false
-	}
-
 	if dto.Port < 1024 || dto.Port > 49151 {
 		validation_errors = errors.Join(
 			validation_errors, 

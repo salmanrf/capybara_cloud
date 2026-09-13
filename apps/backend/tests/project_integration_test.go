@@ -350,7 +350,7 @@ func TestProjectUpdateOne(t *testing.T) {
 		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
 			ProjectID: mock_project_uuid,
 			Name: pgtype.Text{String: "Capybara", Valid: true},
-			Role: "owner",
+			Role: pgtype.Text{String: "owner", Valid: true},
 		}
 
 		new_name := "Binturong Org"
@@ -404,7 +404,7 @@ func TestProjectUpdateOne(t *testing.T) {
 		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
 			ProjectID: mock_project_uuid,
 			Name: pgtype.Text{String: "Capybara", Valid: true},
-			Role: "member",
+			Role: pgtype.Text{String: "member", Valid: true},
 		}
 
 		payload := `{"name": "Tai Lung"}`
@@ -510,7 +510,7 @@ func TestProjectDeleteOne(t *testing.T) {
 	}
 	
 	project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-		Role: "owner",
+		Role: pgtype.Text{String: "owner", Valid: true},
 	}
 
 	t.Run("it should return status 204 on deletion", func (t *testing.T) {
@@ -588,7 +588,7 @@ func TestProjectDeleteOne(t *testing.T) {
 
 	t.Run("it should return status 403 when doesn't have suficient permission", func (t *testing.T) {
 		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-			Role: "owner",
+			Role: pgtype.Text{String: "owner", Valid: true},
 		}
 		
 		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
@@ -609,9 +609,9 @@ func TestProjectDeleteOne(t *testing.T) {
 
 	t.Run("it should return status 403 when doesn't have suficient permission", func (t *testing.T) {
 		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-			Role: "owner",
+			Role: pgtype.Text{String: "owner", Valid: true},
 		}
-		
+
 		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
 		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
 		res := httptest.NewRecorder()

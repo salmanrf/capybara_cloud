@@ -154,7 +154,7 @@ type StubApplicationService struct {
 	Update_calls_arg2 []string
 	Update_calls_arg3 []dto.UpdateApplicationDto
 	Find_one_n_calls int
-	Find_one_return *database.FindOneApplicationWithProjectMemberRow
+	Find_one_return *database.FindOneApplicationCompleteRow
 	Find_one_error error
 	Find_one_calls_arg1 []string
 	Find_one_calls_arg2 []string
@@ -208,7 +208,7 @@ func (s *StubApplicationService) Update(app_id string, user_id string, dto dto.U
 	return s.Update_return, s.Update_err
 }
 
-func (s *StubApplicationService) FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error) {
+func (s *StubApplicationService) FindOneComplete(app_id string, user_id string) (*database.FindOneApplicationCompleteRow, error) {
 	s.Find_one_n_calls += 1
 	s.Find_one_calls_arg1 = append(s.Find_one_calls_arg1, app_id)
 	s.Find_one_calls_arg2 = append(s.Find_one_calls_arg2, user_id)

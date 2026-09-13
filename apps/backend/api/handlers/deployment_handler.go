@@ -105,13 +105,17 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 
 	deployment, err := h.deployment_service.Deploy(user_id, app_id, file_headers, bundle_file)
 	if err != nil {
-		fmt.Println("Error: ", err)
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusInternalServerError,
-			nil,
-			"Internal server error",
-		)
+		switch err.Error() {
+		case "not_found":
+			utils.ResponseWithError(w, http.StatusNotFound, nil, "Application not found")
+		case "config_not_found":
+			utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Application config not found")
+		case "permission_denied":
+			utils.ResponseWithError(w, http.StatusForbidden, nil, "Permission denied")
+		default:
+			fmt.Println("Error: ", err)
+			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
+		}
 		return
 	}
 

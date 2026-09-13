@@ -68,7 +68,7 @@ func (r *deployment_repository) FindCurrent(app_id string) (*database.Applicatio
 		app_uuid,
 	)
 
-	if strings.Contains(err.Error(), "no rows") {
+	if err != nil && strings.Contains(err.Error(), "no rows") {
 		return nil, errors.New("not_found")
 	}
 	

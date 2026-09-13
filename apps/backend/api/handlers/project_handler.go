@@ -203,7 +203,7 @@ func (h *project_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.Role != "owner" {
+	if project.Role.String != "owner" {
 		utils.ResponseWithError(
 			w,
 			http.StatusForbidden,
@@ -277,7 +277,7 @@ func (h *project_handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.Role != "owner" {
+	if project.Role.String != "owner" {
 		utils.ResponseWithError(
 			w,
 			http.StatusForbidden,

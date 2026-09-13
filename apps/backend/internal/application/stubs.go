@@ -42,16 +42,16 @@ func (s *StubProjectService) ListMyProjects(user_id string) ([]database.FindProj
 }
 
 type StubApplicationRepository struct {
-	find_one_with_project_member_return *database.FindOneApplicationWithProjectMemberRow
-	find_one_with_project_member_error error
+	find_one_complete_return *database.FindOneApplicationCompleteRow
+	find_one_complete_error error
 	upsert_config_return *database.ApplicationConfig
 	upsert_config_error error
 	create_application_return *database.Application
 	create_application_error error
 	update_one_application_return *database.Application
 	update_one_application_error error
-	find_one_with_project_member_n_calls int
-	find_one_with_project_member_call_args []database.FindOneApplicationWithProjectMemberParams
+	find_one_complete_n_calls int
+	find_one_complete_call_args []database.FindOneApplicationCompleteParams
 	upsert_config_n_calls int
 	upsert_config_call_args []database.CreateApplicationConfigParams
 	create_application_n_calls int
@@ -61,16 +61,16 @@ type StubApplicationRepository struct {
 }
 
 func (s *StubApplicationRepository) Clear() {
-	s.find_one_with_project_member_return = nil
-	s.find_one_with_project_member_error = nil
+	s.find_one_complete_return = nil
+	s.find_one_complete_error = nil
 	s.upsert_config_return = nil
 	s.upsert_config_error = nil
 	s.create_application_return = nil
 	s.create_application_error = nil
 	s.update_one_application_return = nil
 	s.update_one_application_error = nil
-	s.find_one_with_project_member_n_calls = 0
-	s.find_one_with_project_member_call_args = nil
+	s.find_one_complete_n_calls = 0
+	s.find_one_complete_call_args = nil
 	s.upsert_config_n_calls = 0
 	s.upsert_config_call_args = nil
 	s.create_application_n_calls = 0
@@ -79,10 +79,10 @@ func (s *StubApplicationRepository) Clear() {
 	s.update_one_application_call_args = nil
 }
 
-func (s *StubApplicationRepository) FindOneWithProjectMember(params database.FindOneApplicationWithProjectMemberParams) (*database.FindOneApplicationWithProjectMemberRow, error) {
-	s.find_one_with_project_member_n_calls += 1
-	s.find_one_with_project_member_call_args = append(s.find_one_with_project_member_call_args, params)
-	return s.find_one_with_project_member_return, s.find_one_with_project_member_error
+func (s *StubApplicationRepository) FindOneComplete(params database.FindOneApplicationCompleteParams) (*database.FindOneApplicationCompleteRow, error) {
+	s.find_one_complete_n_calls += 1
+	s.find_one_complete_call_args = append(s.find_one_complete_call_args, params)
+	return s.find_one_complete_return, s.find_one_complete_error
 }
 
 func (s *StubApplicationRepository) UpsertConfig(params database.CreateApplicationConfigParams) (*database.ApplicationConfig, error) {
@@ -104,7 +104,7 @@ func (s *StubApplicationRepository) UpdateOneApplication(params database.UpdateO
 }
 
 type StubApplicationService struct {
-	Find_one_return *database.FindOneApplicationWithProjectMemberRow
+	Find_one_return *database.FindOneApplicationCompleteRow
 	Find_one_error  error
 	Find_one_n_calls int
 	Find_one_call_args []FindOneCallArgs
@@ -164,7 +164,7 @@ func (s *StubApplicationService) Update(app_id string, user_id string, update_dt
 	return s.update_return, s.update_error
 }
 
-func (s *StubApplicationService) FindOne(app_id string, user_id string) (*database.FindOneApplicationWithProjectMemberRow, error) {
+func (s *StubApplicationService) FindOneComplete(app_id string, user_id string) (*database.FindOneApplicationCompleteRow, error) {
 	s.Find_one_n_calls += 1
 	s.Find_one_call_args = append(s.Find_one_call_args, FindOneCallArgs{app_id, user_id})
 	return s.Find_one_return, s.Find_one_error
