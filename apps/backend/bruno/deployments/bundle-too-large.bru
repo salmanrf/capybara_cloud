@@ -1,0 +1,19 @@
+meta {
+  name: create deployment - bundle exceeds MAX_DEPLOY_BUNDLE_SIZE (413)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/applications/{{app_id}}/deployments
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  bundle: @file(../../masbro-backup.sql)
+}
+
+docs {
+  Expects 413. Needs a file larger than MAX_DEPLOY_BUNDLE_SIZE in .env; swap the @file path for any big local file.
+}
