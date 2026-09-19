@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	pkgerr "github.com/pkg/errors"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/docker"
+	errutils "github.com/salmanrf/capybara-cloud/packages/shared-go/errors"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
@@ -303,12 +305,11 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	docker_full_image_reference := utils.FullImageRef(dep)
 
 	if _, err := os.ReadDir(dep.BuildPath); err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Build] - Unable to locate build directory"), 
-			err,
-		) 
+		errmsg := errutils.WithAttrs(pkgerr.WithStack(errors.Join(err)))
 		s.logger.Error(
-			errmsg.Error(), 
+			"[Deploy Step - Build] - Unable to locate build directory", 
+			"error",
+			errmsg,
 			"app_id", app.AppID, 
 			"deployment_id", dep.AppDpID, 
 			"build_path", dep.BuildPath,
@@ -328,12 +329,13 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	dockerfile_template_path := path.Join(locutils.GetConfig().DOCKER_TEMPLATES_DIR, "Dockerfile")
 	template_dockerfile, err := os.OpenFile(dockerfile_template_path, os.O_RDONLY, 0)
 	if err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Build] - Unable to locate template Dockerfile"), 
-			err,
-		) 
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
+		)
 		s.logger.Error(
-			errmsg.Error(), 
+			"[Deploy Step - Build] - Unable to locate template Dockerfile",
+			"error",
+			errmsg, 
 			"app_id", app.AppID, 
 			"deployment_id", dep.AppDpID, 
 			"build_path", dep.BuildPath,
@@ -346,12 +348,13 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	dockerfile_path := path.Join(dep.BuildPath, "Dockerfile")
 	dockerfile, err := os.OpenFile(dockerfile_path, os.O_CREATE | os.O_WRONLY, 0o774)
 	if err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Build] - Unable to read Dockerfile - Unable to read Dockerfile"), 
-			err,
-		) 
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
+		)
 		s.logger.Error(
-			errmsg.Error(), 
+			"[Deploy Step - Build] - Unable to read Dockerfile - Unable to read Dockerfile",
+			"error",
+			errmsg, 
 			"app_id", app.AppID, 
 			"deployment_id", dep.AppDpID, 
 			"build_path", dep.BuildPath,
@@ -363,12 +366,13 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 
 	_, err = io.Copy(dockerfile, template_dockerfile)
 	if err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Build] - Unable to copy Dockerfile"), 
-			err,
-		) 
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
+		)
 		s.logger.Error(
-			errmsg.Error(), 
+			"[Deploy Step - Build] - Unable to copy Dockerfile",
+			"error",
+			errmsg, 
 			"app_id", app.AppID, 
 			"deployment_id", dep.AppDpID, 
 			"build_path", dep.BuildPath,
@@ -381,14 +385,15 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	build_params := docker.DockerBuildDto{ContextPath: dep.BuildPath, Tag: docker_full_image_reference}
 	err = s.docker.Build(build_params)
 	if err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Build] - Unable to build docker image"),
-			err,
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
 		)
 		s.logger.Error(
-			errmsg.Error(),
-			"app_id", app.AppID,
-			"deployment_id", dep.AppDpID,
+			"[Deploy Step - Build] - Unable to build docker image",
+			"error",
+			errmsg, 
+			"app_id", app.AppID, 
+			"deployment_id", dep.AppDpID, 
 			"build_path", dep.BuildPath,
 			"image", docker_full_image_reference,
 		)
@@ -426,14 +431,15 @@ func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
 
 	dockerimg, err := s.docker.FindOneImageByRepoTag(repotag)
 	if err != nil || dockerimg == nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Push] Unable to find docker image"),
-			err,
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
 		)
 		s.logger.Error(
-			errmsg.Error(),
-			"app_id", app.AppID,
-			"deployment_id", dep.AppDpID,
+			"[Deploy Step - Push] Unable to find docker image",
+			"error",
+			errmsg, 
+			"app_id", app.AppID, 
+			"deployment_id", dep.AppDpID, 
 			"image", image,
 		)
 		res.DeploymentError = errmsg
@@ -442,14 +448,15 @@ func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
 
 	err = s.docker.Push(image)
 	if err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Push] Unable to push docker image"),
-			err,
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
 		)
 		s.logger.Error(
-			errmsg.Error(),
-			"app_id", app.AppID,
-			"deployment_id", dep.AppDpID,
+			"[Deploy Step - Push] Unable to push docker image",
+			"error",
+			errmsg, 
+			"app_id", app.AppID, 
+			"deployment_id", dep.AppDpID, 
 			"image", image,
 		)
 		res.DeploymentError = errmsg
@@ -494,12 +501,13 @@ func (s *service) Start(dto DeployRequest) (DeployStepResult, error) {
 	
 	ins, err := s.deployment_repository.CreateInstance(create_ins_params)
 	if err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Start] Unable to create deployment instance"),
-			err,
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
 		)
 		s.logger.Error(
-			errmsg.Error(),
+			"[Deploy Step - Start] Unable to create deployment instance",
+			"error",
+			errmsg, 
 			"app_id", app.AppID,
 			"dep_id", dep.AppDpID,
 			"container", create_ins_params.ContainerName,
@@ -511,12 +519,13 @@ func (s *service) Start(dto DeployRequest) (DeployStepResult, error) {
 
 	start_res, err := s.masbro_service.Start(dto, *ins)
 	if err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Start] Unable to start container"),
-			err,
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
 		)
 		s.logger.Error(
-			errmsg.Error(),
+			"[Deploy Step - Start] Unable to start container",
+			"error",
+			errmsg, 
 			"app_id", app.AppID,
 			"dep_id", dep.AppDpID,
 			"container", create_ins_params.ContainerName,
@@ -537,18 +546,20 @@ func (s *service) Start(dto DeployRequest) (DeployStepResult, error) {
 	}
 	ins, err = s.deployment_repository.UpdateInstance(update_params)
 	if err != nil {
-		errmsg := errors.Join(
-			errors.New("[Deploy Step - Start] Unable to update deplyment instance"),
-			err,
+		errmsg := errutils.WithAttrs(
+			pkgerr.WithStack(err),
 		)
 		s.logger.Error(
-			errmsg.Error(),
+			"[Deploy Step - Start] Unable to update deplyment instance",
+			"error",
+			errmsg, 
 			"app_id", app.AppID,
 			"dep_id", dep.AppDpID,
 			"container", create_ins_params.ContainerName,
 			"port", create_ins_params.ContainerPort,
 		)
 		res.DeploymentError = errmsg
+		return res, res.DeploymentError
 	}
 
 	return res, nil
