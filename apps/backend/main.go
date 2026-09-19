@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
+	"path"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/salmanrf/capybara-cloud/apps/backend/api"
@@ -17,6 +18,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/organization"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/user"
+	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/logger"
 	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
@@ -35,32 +37,49 @@ func create_db_conn(ctx context.Context, db_uri string) *pgxpool.Pool {
 	return dbpool
 }
 
-func setup() (context.Context, locutils.Config, *pgxpool.Pool, error) {
-	locutils.CreateLogger()
+type futils struct {}
+func (_ *futils) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
+	return os.OpenFile(name, flag, perm)
+}
+
+func setup() (func (), context.Context, locutils.Config, *slog.Logger, *pgxpool.Pool, error) {
+	futil := &futils{}
 
 	pwd, _ := os.Getwd()
-	envpath := filepath.Join(pwd, ".env")
+	envpath := path.Join(pwd, ".env")
 
 	cfg, err := locutils.LoadConfig(envpath)
 	if err != nil {
-		return nil, cfg, nil, err
+		return nil, nil, cfg, nil, nil, err
+	}
+	
+	logpath := path.Join(pwd, "apps.backend.logs")
+	logger, log_cleanup, err := logger.InitLogger(logpath, futil)
+	if err != nil {
+		return nil, nil, cfg, nil, nil, err
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	dbpool := create_db_conn(ctx, cfg.POSTGRES_URI)
 
 	err = dbpool.Ping(ctx)
 	if err != nil {
-		return nil, cfg, nil, fmt.Errorf("unable to ping database: %w", err)
+		cancel()
+		return nil, nil, cfg, nil, nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
 	fmt.Println("Database connection established")
 
-	return ctx, cfg, dbpool, nil
+	teardown := func () {
+		log_cleanup()
+		cancel()
+	}
+
+	return teardown, ctx, cfg, logger, dbpool, nil
 }
 
 func main() {
-	ctx, cfg, db_conn, err := setup()
+	teardown, ctx, cfg, logger, db_conn, err := setup()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -69,7 +88,7 @@ func main() {
 		if err := recover(); err != nil {
 			fmt.Println("Server encountered a panic", err)
 		}
-
+		teardown()
 		fmt.Println("Server is stopped")
 	}()
 
@@ -95,6 +114,7 @@ func main() {
 		port_allocator_service,
 	)
 	if err != nil {
+		teardown()
 		log.Fatal(err)
 	}
 	masbro_service := masbro_worker.New(docker_service)
@@ -117,7 +137,7 @@ func main() {
 	jwt_utils := utils.NewJWTUtils(cfg.AUTH_JWT_SECRET, cfg.AUTH_JWT_ISSUER, []string{cfg.AUTH_JWT_AUDIENCE})
 
 	api_server := api.NewAPIServer(
-		ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,
@@ -132,6 +152,7 @@ func main() {
 	go listener_service.Listen()
 	fmt.Printf("Starting API server on %s\n", address)
 	if err := http.ListenAndServe(address, api_server); err != nil {
+		teardown()
 		log.Fatalf("Server failed: %v", err)
 	}
 }

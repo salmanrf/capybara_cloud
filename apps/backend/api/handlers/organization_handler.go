@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 )
 
 type org_handler struct {
+	logger *slog.Logger
 	org_service organization.Service
 }
 
@@ -24,8 +26,9 @@ type OrgHandlers interface {
 	HandleListMyOrganizations(w http.ResponseWriter, r *http.Request)
 }
 
-func NewOrgHandlers(org_service organization.Service) OrgHandlers {
+func NewOrgHandlers(logger *slog.Logger, org_service organization.Service) OrgHandlers {
 	return &org_handler{
+		logger,
 		org_service,
 	}
 }

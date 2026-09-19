@@ -54,7 +54,7 @@ func InitLogger(log_file_path string, futils FileUtilDeps) (*slog.Logger, func (
 	}
 
 	if log_file_path != "" {
-		log_file, err = futils.OpenFile(log_file_path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		log_file, err = futils.OpenFile(log_file_path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 		if err != nil {
 			return nil, closer, err
 		}

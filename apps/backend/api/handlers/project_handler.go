@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 )
 
 type project_handler struct {
+	logger *slog.Logger
 	project_service project.Service
 }
 
@@ -24,8 +26,9 @@ type ProjectHandlers interface {
 	HandleDelete(w http.ResponseWriter, r *http.Request)
 }
 
-func NewProjectHandlers(project_service project.Service) ProjectHandlers {
+func NewProjectHandlers(logger *slog.Logger, project_service project.Service) ProjectHandlers {
 	return &project_handler{
+		logger,
 		project_service,
 	}
 }
