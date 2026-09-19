@@ -2,11 +2,15 @@ package logger
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path"
 	"testing"
 
+	pkgerr "github.com/pkg/errors"
+
 	"github.com/salmanrf/capybara-cloud/apps/backend/tests"
+	errutils "github.com/salmanrf/capybara-cloud/packages/shared-go/errors"
 )
 
 func setup(logfilename string, t *testing.T) (*os.File, func ()) {
@@ -259,6 +263,189 @@ func TestLogger(t *testing.T) {
 
 		if got_logfile_len != want_logfile_len {
 			t.Errorf("got %d log file entries (>= INFO only), want %d", got_logfile_len, want_logfile_len)
+		}
+	})
+}
+
+func TestErrorLogger(t *testing.T) {
+	futils := tests.File_utils_stub{}
+	futils.Open_return = &os.File{}
+	futils.Open_error = nil
+
+	t.Run("should log error with nested structure if error is provided", func (t *testing.T) {
+		stderr_file, cleanup := setup("test.logs.errors", t)
+
+		defer func () {
+			futils.Clear()
+			cleanup()
+		}()
+		
+		logger, _, err := InitLogger("", &futils)
+		if err != nil {
+			t.Fatal("got unexpected error initializing logger instance", err)
+		}
+
+		logger.Error("abcd", "error", errors.New("I'm a teapot"))
+
+		got_stderr_lines, err := tests.ReadFileLines(stderr_file)
+		if err != nil {
+			t.Fatal("got unexpected error setting up log file", err)
+		}
+
+		got_stderr_len := len(got_stderr_lines)
+		want_stderr_len := 1
+		if got_stderr_len != want_stderr_len  {
+			t.Errorf("got %d stderr lines, want %d", got_stderr_len, want_stderr_len)
+		}
+	})
+
+	t.Run("should log error with arbitrary fields if error is ErrWithAttrs", func (t *testing.T) {
+		stderr_file, cleanup := setup("test.logs.errors", t)
+
+		defer func () {
+			futils.Clear()
+			cleanup()
+		}()
+		
+		logger, _, err := InitLogger("", &futils)
+		if err != nil {
+			t.Fatal("got unexpected error initializing logger instance", err)
+		}
+
+		want_msg := "Unable to run application instance"
+		want_err := errors.New("unable to find docker executable")
+		want_structured_err := errutils.WithAttrs(
+			want_err,
+			"version",
+			"1.0.0",
+			"deployment_id",
+			"abcd",
+			"role",
+			"contributor",
+		)
+
+		logger.Error(want_msg, "error", want_structured_err)
+
+		got_stderr_lines, err := tests.ReadFileLines(stderr_file)
+		if err != nil {
+			t.Fatal("got unexpected error setting up log file", err)
+		}
+
+		var got_json_log LogEntry
+		got_line := got_stderr_lines[0]
+
+		got_parse_err := json.Unmarshal([]byte(got_line), &got_json_log)
+		if got_parse_err != nil {
+			t.Fatal("got error parsing log line into json", got_parse_err)
+		}
+
+		got_error_keys := len(got_json_log.Error)
+		want_error_keys := 3 + 1 // ? arbitrary fields + message
+		if got_error_keys != want_error_keys {
+			t.Errorf("got %d .error keys, want %d", got_error_keys, want_error_keys)
+		}
+	})
+
+	t.Run("should log error with stack_trace if error is StackTracer", func (t *testing.T) {
+		stderr_file, cleanup := setup("test.logs.errors", t)
+
+		defer func () {
+			futils.Clear()
+			cleanup()
+		}()
+		
+		logger, _, err := InitLogger("", &futils)
+		if err != nil {
+			t.Fatal("got unexpected error initializing logger instance", err)
+		}
+
+		want_err := pkgerr.WithStack(errors.New("unable to find docker executable"))
+		logger.Error("abcd", "error", want_err)
+
+		got_stderr_lines, err := tests.ReadFileLines(stderr_file)
+		if err != nil {
+			t.Fatal("got unexpected error setting up log file", err)
+		}
+
+		got_stderr_len := len(got_stderr_lines)
+		want_stderr_len := 1
+		if got_stderr_len != want_stderr_len  {
+			t.Errorf("got %d stderr lines, want %d", got_stderr_len, want_stderr_len)
+		}
+
+		var got_json_log LogEntry
+		got_line := got_stderr_lines[0]
+
+		got_parse_err := json.Unmarshal([]byte(got_line), &got_json_log)
+		if got_parse_err != nil {
+			t.Fatal("got error parsing log line into json", got_parse_err)
+		}
+
+		got_json_err := got_json_log.Error
+		got_err_stack_trace, got_exists := got_json_log.Error["stack_trace"]
+		if !got_exists {
+			t.Error("got error with missing .stack_trace", got_json_err)
+		}
+
+		if stack_str, ok := got_err_stack_trace.(string); !ok || stack_str == "" {
+			t.Errorf("got stack_trace empty, want non-empty string")
+		}
+	})
+
+	t.Run("should log error with stack_trace and arbitrary fields if error is both StackTracer and ErrWithAttrs", func (t *testing.T) {
+		stderr_file, cleanup := setup("test.logs.errors", t)
+
+		defer func () {
+			futils.Clear()
+			cleanup()
+		}()
+		
+		logger, _, err := InitLogger("", &futils)
+		if err != nil {
+			t.Fatal("got unexpected error initializing logger instance", err)
+		}
+
+		want_err := pkgerr.WithStack(errors.New("unable to find docker executable"))
+		want_structured_err := errutils.WithAttrs(
+			want_err,
+			"version",
+			"1.0.0",
+		)
+
+		logger.Error("abcd", "error", want_structured_err)
+
+		got_stderr_lines, err := tests.ReadFileLines(stderr_file)
+		if err != nil {
+			t.Fatal("got unexpected error setting up log file", err)
+		}
+
+		got_stderr_len := len(got_stderr_lines)
+		want_stderr_len := 1
+		if got_stderr_len != want_stderr_len  {
+			t.Errorf("got %d stderr lines, want %d", got_stderr_len, want_stderr_len)
+		}
+
+		var got_json_log LogEntry
+		got_line := got_stderr_lines[0]
+
+		got_parse_err := json.Unmarshal([]byte(got_line), &got_json_log)
+		if got_parse_err != nil {
+			t.Fatal("got error parsing log line into json", got_parse_err)
+		}
+
+		got_json_err := got_json_log.Error
+		got_err_stack_trace, got_exists := got_json_log.Error["stack_trace"]
+		if !got_exists {
+			t.Error("got error with missing .stack_trace", got_json_err)
+		}
+
+		if stack_str, ok := got_err_stack_trace.(string); !ok || stack_str == "" {
+			t.Errorf("got stack_trace field empty, want non-empty string")
+		}
+
+		got_err_version, got_exists := got_json_log.Error["version"]
+		if version_field, ok := got_err_version.(string); !ok || version_field == "" {
+			t.Errorf("got version field empty, want non-empty string")
 		}
 	})
 }
