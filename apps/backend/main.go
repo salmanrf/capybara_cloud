@@ -18,11 +18,11 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/organization"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/user"
-	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/logger"
 	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/docker"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 

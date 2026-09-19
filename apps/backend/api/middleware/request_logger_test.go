@@ -8,8 +8,8 @@ import (
 	"path"
 	"testing"
 
-	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/logger"
 	"github.com/salmanrf/capybara-cloud/apps/backend/tests"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 )
 
 func TestLoggingMiddleware(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 
 	pkgerr "github.com/pkg/errors"
 
-	"github.com/salmanrf/capybara-cloud/apps/backend/tests"
 	errutils "github.com/salmanrf/capybara-cloud/packages/shared-go/errors"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/tests"
 )
 
 func setup(logfilename string, t *testing.T) (*os.File, func ()) {
