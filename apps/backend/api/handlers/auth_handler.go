@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 )
 
 type auth_handler struct {
+	logger *slog.Logger
 	auth_service auth_module.Service
 	user_service user.Service
 	jwt_utils    utils.JWT
@@ -26,8 +28,9 @@ type AuthHandlers interface {
 	HandleSignin(w http.ResponseWriter, r *http.Request)
 }
 
-func NewAuthHandlers(auth_service auth_module.Service, user_service user.Service, jwt_utils utils.JWT) AuthHandlers {
+func NewAuthHandlers(logger *slog.Logger, auth_service auth_module.Service, user_service user.Service, jwt_utils utils.JWT) AuthHandlers {
 	return &auth_handler{
+		logger,
 		auth_service,
 		user_service,
 		jwt_utils,

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 )
 
 type deployment_handler struct {
+	logger *slog.Logger
 	deployment_service deployment.Service
 }
 
@@ -19,8 +21,9 @@ type AppDeploymentHandlers interface {
 	HandleCreateOneDeployment(w http.ResponseWriter, r *http.Request) 
 }
 
-func NewAppDeploymentHandlers(deployment_service deployment.Service) AppDeploymentHandlers {
+func NewAppDeploymentHandlers(logger *slog.Logger, deployment_service deployment.Service) AppDeploymentHandlers {
 	return &deployment_handler{
+		logger,
 		deployment_service,
 	}
 }

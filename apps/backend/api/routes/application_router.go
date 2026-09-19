@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -11,11 +12,11 @@ import (
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
-func SetupApplicationRouter(application_service application.Service, deployment_service deployment.Service, jwt_validator utils.JWT) chi.Router {
+func SetupApplicationRouter(logger *slog.Logger, application_service application.Service, deployment_service deployment.Service, jwt_validator utils.JWT) chi.Router {
 	r := chi.NewRouter()
 	
-	app_handlers := handlers.NewAppHandlers(application_service)
-	deployment_handlers := handlers.NewAppDeploymentHandlers(deployment_service)
+	app_handlers := handlers.NewAppHandlers(logger, application_service)
+	deployment_handlers := handlers.NewAppDeploymentHandlers(logger, deployment_service)
 
 	r.Post("/", middleware.LoginGuard(
 		jwt_validator, 

@@ -11,6 +11,8 @@ require github.com/salmanrf/capybara-cloud/packages/shared-go v0.0.0-00010101000
 
 require github.com/google/go-cmp v0.7.0
 
+require github.com/pkg/errors v0.9.1
+
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect

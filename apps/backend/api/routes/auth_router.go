@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,10 +11,10 @@ import (
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
-func SetupAuthRouter(auth_service auth_module.Service, user_service user.Service, jwt_utils utils.JWT) chi.Router {
+func SetupAuthRouter(logger *slog.Logger, auth_service auth_module.Service, user_service user.Service, jwt_utils utils.JWT) chi.Router {
 	r := chi.NewRouter()
 
-	auth_handlers := handlers.NewAuthHandlers(auth_service, user_service, jwt_utils)
+	auth_handlers := handlers.NewAuthHandlers(logger, auth_service, user_service, jwt_utils)
 
 	r.Get("/me", http.HandlerFunc(auth_handlers.HandleGetMe))
 	r.Post("/signup", http.HandlerFunc(auth_handlers.HandleSignup))

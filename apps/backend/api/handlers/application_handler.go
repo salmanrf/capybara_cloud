@@ -11,13 +11,12 @@ import (
 
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/application"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
-	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
 type app_handler struct {
+	logger *slog.Logger
 	app_service application.Service
-	logger slog.Logger
 }
 
 type AppHandlers interface {
@@ -29,12 +28,10 @@ type AppHandlers interface {
 	HandleCreateOneDeployment(w http.ResponseWriter, r *http.Request) 
 }
 
-func NewAppHandlers(app_service application.Service) AppHandlers {
-	logger := locutils.Logger
-	
+func NewAppHandlers(logger *slog.Logger, app_service application.Service) AppHandlers {
 	return &app_handler{
-		app_service,
 		logger,
+		app_service,
 	}
 }
 
@@ -45,6 +42,15 @@ func (h *app_handler) HandleFindOne(w http.ResponseWriter, r *http.Request) {
 	app, err :=  h.app_service.FindOneComplete(app_id, user_id)
 
 	if err != nil {
+		h.logger.Error(
+			"Unable to find application",
+			"error",
+			err,
+			"app_id",
+			app_id,
+			"user_id",
+			user_id,
+		)
 		errmsg := err.Error()
 		switch errmsg {
 		case "permission_denied":

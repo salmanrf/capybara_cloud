@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,10 +11,10 @@ import (
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
-func SetupOrganizationRouter(org_service organization.Service, jwt_validator utils.JWT) chi.Router {
+func SetupOrganizationRouter(logger *slog.Logger, org_service organization.Service, jwt_validator utils.JWT) chi.Router {
 	r := chi.NewRouter()
 
-	org_handlers := handlers.NewOrgHandlers(org_service)
+	org_handlers := handlers.NewOrgHandlers(logger, org_service)
 
 	// Handle base path - GET for list, POST for create
 	r.Post("/", middleware.LoginGuard(

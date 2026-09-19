@@ -2,7 +2,7 @@ package tests
 
 import (
 	"bytes"
-	"context"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,7 +17,8 @@ import (
 )
 
 func TestProjectCreateIntegration(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 
 	user_service := &StubUserService{}
 	auth_service := &StubAuthService{}
@@ -39,7 +40,7 @@ func TestProjectCreateIntegration(t *testing.T) {
 	user_service.find_by_id_err = nil
 
 	server := api.NewAPIServer(
-		test_ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,
@@ -192,7 +193,8 @@ func TestProjectCreateIntegration(t *testing.T) {
 }
 
 func TestProjectGetOne(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 
 	user_service := &StubUserService{}
 	auth_service := &StubAuthService{}
@@ -214,7 +216,7 @@ func TestProjectGetOne(t *testing.T) {
 	user_service.find_by_id_err = nil
 
 	server := api.NewAPIServer(
-		test_ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,
@@ -296,7 +298,8 @@ func TestProjectGetOne(t *testing.T) {
 }
 
 func TestProjectUpdateOne(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 
 	user_service := &StubUserService{}
 	auth_service := &StubAuthService{}
@@ -318,7 +321,7 @@ func TestProjectUpdateOne(t *testing.T) {
 	user_service.find_by_id_err = nil
 
 	server := api.NewAPIServer(
-		test_ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,
@@ -467,7 +470,8 @@ func TestProjectUpdateOne(t *testing.T) {
 }
 
 func TestProjectDeleteOne(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 
 	user_service := &StubUserService{}
 	auth_service := &StubAuthService{}
@@ -489,7 +493,7 @@ func TestProjectDeleteOne(t *testing.T) {
 	user_service.find_by_id_err = nil
 
 	server := api.NewAPIServer(
-		test_ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,

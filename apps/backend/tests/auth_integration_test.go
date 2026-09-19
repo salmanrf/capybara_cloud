@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,11 +10,14 @@ import (
 	"testing"
 
 	"github.com/salmanrf/capybara-cloud/apps/backend/api"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
 func TestAuthSignupIntegration(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+
+	defer cleanup()
 
 	t.Run("it creates and returns a new user", func (t *testing.T) {
 		user_service := &StubUserService{}
@@ -40,7 +42,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 		response := httptest.NewRecorder()
 
 		api_server := api.NewAPIServer(
-			test_ctx,
+			logger,
 			application_service,
 			deployment_service,
 			user_service,
@@ -77,7 +79,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 		jwt_validator := &StubJwtValidator{}
 
 		api_server := api.NewAPIServer(
-			test_ctx,
+			logger,
 			application_service,
 			deployment_service,
 			user_service,
@@ -127,7 +129,7 @@ func TestAuthSignupIntegration(t *testing.T) {
 		jwt_validator := &StubJwtValidator{}
 
 		api_server := api.NewAPIServer(
-			test_ctx,
+			logger,
 			application_service,
 			deployment_service,
 			user_service,

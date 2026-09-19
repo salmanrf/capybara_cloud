@@ -18,6 +18,7 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/api/routes"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
@@ -27,7 +28,9 @@ func TestCreateApplicationConfig(t *testing.T) {
 	jwt_validator := &StubJwtValidator{}
 
 	mux := chi.NewRouter()
-	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, deployment_service, jwt_validator))
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(logger, application_service, deployment_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler
@@ -529,7 +532,9 @@ func TestFindOneApplicationConfig(t *testing.T) {
 	jwt_validator := &StubJwtValidator{}
 
 	mux := chi.NewRouter()
-	mux.Mount("/api/applications", routes.SetupApplicationRouter(application_service, deployment_service, jwt_validator))
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
+	mux.Mount("/api/applications", routes.SetupApplicationRouter(logger, application_service, deployment_service, jwt_validator))
 
 	type api_server struct {
 		http.Handler

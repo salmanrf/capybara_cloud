@@ -1,10 +1,11 @@
 package api
 
 import (
-	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/salmanrf/capybara-cloud/apps/backend/api/middleware"
 	"github.com/salmanrf/capybara-cloud/apps/backend/api/routes"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/application"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/auth"
@@ -12,7 +13,6 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/organization"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/user"
-	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
@@ -20,15 +20,8 @@ type api_server struct {
 	http.Handler
 }
 
-func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		locutils.Logger.Info("Request", "method", r.Method, "path", r.URL.Path)
-		next.ServeHTTP(w, r)
-	})
-}
-
 func NewAPIServer(
-	ctx context.Context,
+	logger *slog.Logger,
 	application_service application.Service,
 	deployment_service deployment.Service,
 	user_service user.Service,
@@ -39,24 +32,30 @@ func NewAPIServer(
 ) http.Handler {
 	router := chi.NewRouter()
 
-	router.Use(LoggingMiddleware)
+	loggingmd := middleware.CreateLoggingMiddleware(logger)
+
+	router.Use(loggingmd)
 
 	router.Route("/api", func (r chi.Router) {
 		r.Mount("/applications", routes.SetupApplicationRouter(
+			logger,
 			application_service,
 			deployment_service,
 			jwt_validator,
 		))
 		r.Mount("/organizations", routes.SetupOrganizationRouter(
+			logger,
 			org_service,
 			jwt_validator,
 		))
 		r.Mount("/auth", routes.SetupAuthRouter(
+			logger,
 			auth_service,
 			user_service,
 			jwt_validator,
 		))
 		r.Mount("/projects", routes.SetupProjectRouter(
+			logger,
 			project_service,
 			jwt_validator,
 		))

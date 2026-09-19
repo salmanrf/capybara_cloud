@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,10 +11,10 @@ import (
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
 
-func SetupProjectRouter(project_service project.Service, jwt_validator utils.JWT) chi.Router {
+func SetupProjectRouter(logger *slog.Logger, project_service project.Service, jwt_validator utils.JWT) chi.Router {
 	r := chi.NewRouter()
 
-	project_handlers := handlers.NewProjectHandlers(project_service)
+	project_handlers := handlers.NewProjectHandlers(logger, project_service)
 
 	r.Put("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		utils.ResponseWithError(w, http.StatusNotFound, nil, "Project ID required")
