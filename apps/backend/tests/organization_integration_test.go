@@ -2,7 +2,7 @@ package tests
 
 import (
 	"bytes"
-	"context"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +18,8 @@ import (
 )
 
 func TestOrganizationCreateIntegration(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 
 	user_service := &StubUserService{}
 	auth_service := &StubAuthService{}
@@ -40,7 +41,7 @@ func TestOrganizationCreateIntegration(t *testing.T) {
 	user_service.find_by_id_err = nil
 
 	server := api.NewAPIServer(
-		test_ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,
@@ -183,7 +184,8 @@ func TestOrganizationCreateIntegration(t *testing.T) {
 }
 
 func TestOrganizationGetOne(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 
 	user_service := &StubUserService{}
 	auth_service := &StubAuthService{}
@@ -205,7 +207,7 @@ func TestOrganizationGetOne(t *testing.T) {
 	user_service.find_by_id_err = nil
 
 	server := api.NewAPIServer(
-		test_ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,
@@ -287,7 +289,8 @@ func TestOrganizationGetOne(t *testing.T) {
 }
 
 func TestOrganizationUpdateOne(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 
 	user_service := &StubUserService{}
 	auth_service := &StubAuthService{}
@@ -309,7 +312,7 @@ func TestOrganizationUpdateOne(t *testing.T) {
 	user_service.find_by_id_err = nil
 
 	server := api.NewAPIServer(
-		test_ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,
@@ -458,7 +461,8 @@ func TestOrganizationUpdateOne(t *testing.T) {
 }
 
 func TestOrganizationDeleteOne(t *testing.T) {
-	test_ctx := context.Background()
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 
 	user_service := &StubUserService{}
 	auth_service := &StubAuthService{}
@@ -480,7 +484,7 @@ func TestOrganizationDeleteOne(t *testing.T) {
 	user_service.find_by_id_err = nil
 
 	server := api.NewAPIServer(
-		test_ctx,
+		logger,
 		application_service,
 		deployment_service,
 		user_service,

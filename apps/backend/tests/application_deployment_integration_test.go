@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/salmanrf/capybara-cloud/apps/backend/api/routes"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 	config "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 )
@@ -20,9 +21,12 @@ func TestCreateApplicationDeployment(t *testing.T) {
 	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
 	
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
 	mux := chi.NewRouter()
 	mux.Mount("/api/applications", 
 		routes.SetupApplicationRouter(
+			logger,
 			app_service, 
 			deployment_service,
 			jwt_validator,
