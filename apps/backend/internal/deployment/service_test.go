@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"log/slog"
 	"context"
 	"errors"
 	"fmt"
@@ -45,6 +46,7 @@ func TestNewService(t *testing.T) {
 		app_service := &application.StubApplicationService{}
 		NewService(
 			ctx,
+			slog.Default(),
 			&StubDocker{},
 			app_service,
 			&StubMasbroService{},
@@ -85,6 +87,7 @@ func TestNewService(t *testing.T) {
 
 		NewService(
 			ctx,
+			slog.Default(),
 			&StubDocker{},
 			app_service,
 			&StubMasbroService{},
@@ -110,6 +113,7 @@ func TestDeploy(t *testing.T) {
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		slog.Default(),
 		&StubDocker{},
 		app_service,
 		&StubMasbroService{},
@@ -575,6 +579,7 @@ func TestCreateInstance(t *testing.T) {
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		slog.Default(),
 		&StubDocker{},
 		app_service,
 		&StubMasbroService{},
@@ -700,6 +705,7 @@ func TestUpdateInstance(t *testing.T) {
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		slog.Default(),
 		&StubDocker{},
 		app_service,
 		&StubMasbroService{},
@@ -1050,10 +1056,6 @@ func (m mock_file) ReadAt(buf []byte, _ int64) (int, error) {
 }
 func (m mock_file) Seek(int64, int) (n int64, e error) { return n, e }
 func (m mock_file) Close() error { return nil }
-func TestMain(m *testing.M) {
-	config.CreateLogger()
-	os.Exit(m.Run())
-}
 
 func TestUpdate(t *testing.T) {
 	ctx := context.Background()
@@ -1065,6 +1067,7 @@ func TestUpdate(t *testing.T) {
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		slog.Default(),
 		&StubDocker{},
 		app_service,
 		&StubMasbroService{},

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -25,17 +26,20 @@ type Service interface {
 
 type service struct {
 	ctx context.Context
+	logger *slog.Logger
 	repository ApplicationRepository
 	project_service project.Service
 }
 
 func NewService(
 	ctx context.Context, 
+	logger *slog.Logger,
 	repository ApplicationRepository,
 	project_service project.Service,
 ) Service {
 	return &service{
 		ctx,
+		logger,
 		repository,
 		project_service,
 	}

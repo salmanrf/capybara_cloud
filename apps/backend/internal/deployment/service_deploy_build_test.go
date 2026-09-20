@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"log/slog"
 	"context"
 	"fmt"
 	"os"
@@ -35,6 +36,7 @@ func TestDeployBuild(t *testing.T) {
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		slog.Default(),
 		stub_docker,
 		app_service,
 		&StubMasbroService{},

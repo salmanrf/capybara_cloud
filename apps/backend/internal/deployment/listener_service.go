@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	masbro_worker "github.com/salmanrf/capybara-cloud/apps/backend/internal/masbro-worker"
-	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
 )
 
@@ -14,27 +13,25 @@ type DeployStepResult = shared_deployment.DeployStepResult
 
 type listener struct {
 	ctx 					 context.Context
+	logger 				 *slog.Logger
 	in_channel 		 chan DeployRequest
 	out_channel 	 chan DeployStepResult
 	deploy_service Service
 	masbro_service masbro_worker.Service
-	logger 				 slog.Logger
 }
 
 type Listener interface {
 	Listen()
 }
 
-func NewListener(ctx context.Context, in_channel chan DeployRequest, out_channel chan DeployStepResult, deploy_service Service, masbro_service masbro_worker.Service) Listener {
-	logger := locutils.Logger
-	
+func NewListener(ctx context.Context, logger *slog.Logger, in_channel chan DeployRequest, out_channel chan DeployStepResult, deploy_service Service, masbro_service masbro_worker.Service) Listener {
 	return &listener{
 		ctx,
+		logger,
 		in_channel,
 		out_channel,
 		deploy_service,
 		masbro_service,
-		logger,
 	}
 }
 
@@ -57,7 +54,7 @@ func (l *listener) Listen() {
 		app := in.ApplicationDto
 		dep := in.DeploymentDto
 
-		l.logger.Info("Received deployment request", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
+		l.logger.Debug("Received deployment request", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
 
 		switch in.DeploymentDto.Status {
 		case shared_deployment.DEPLOY_STATUS_INITIATED:
@@ -89,10 +86,10 @@ func (l *listener) listenResult() {
 		app := in.ApplicationDto
 		dep := in.DeploymentDto
 
-		l.logger.Info("Received deployment result", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
+		l.logger.Debug("Received deployment result", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
 
 		if dep.Status < 0 {
-			l.logger.Warn("Deployment status is already marked as error, skipping", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
+			l.logger.Debug("Deployment status is already marked as error, skipping", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
 			continue
 		}
 
@@ -109,7 +106,7 @@ func (l *listener) listenResult() {
 		case shared_deployment.DEPLOY_STATUS_BUILD_INSTANCE_STARTED:
 			continue
 		default:
-			l.logger.Warn("Unrecognized deployment status", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
+			l.logger.Error("Unrecognized deployment status", "app_id", app.AppID, "deployment_id", dep.AppDpID, "version", dep.VersionNumber, "status", dep.Status)
 			continue
 		}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
+	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 ) 
 
 func createDeploymentServiceStub() *StubService {
@@ -44,6 +45,9 @@ func createDeploymentServiceStub() *StubService {
 }
 
 func TestDeployListener(t *testing.T) {
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
+	
 	mock_app := database.Application{
 		Name: "testapp",
 		Type: shared_deployment.APP_TYPE_NODEJS_CONTAINER,
@@ -78,7 +82,7 @@ func TestDeployListener(t *testing.T) {
 
 		deployment_service := createDeploymentServiceStub()
 		masbro_service := StubMasbroService{}
-		listener_service := NewListener(ctx, in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(ctx, logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		go listener_service.Listen()
 		cancel()
@@ -109,7 +113,7 @@ func TestDeployListener(t *testing.T) {
 
 		deployment_service := createDeploymentServiceStub()
 		masbro_service := StubMasbroService{}
-		listener_service := NewListener(ctx, in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(ctx, logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		go listener_service.Listen()
 		cancel()
@@ -139,7 +143,7 @@ func TestDeployListener(t *testing.T) {
 
 		deployment_service := createDeploymentServiceStub()
 		masbro_service := StubMasbroService{}
-		listener_service := NewListener(ctx, in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(ctx, logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		deployment_service.extract_fn = func(dto shared_deployment.DeployRequest) (res shared_deployment.DeployStepResult, err error) {
 			// ? We care only about Extract, so listener can be cancelled after 
@@ -173,7 +177,7 @@ func TestDeployListener(t *testing.T) {
 
 		deployment_service := createDeploymentServiceStub()
 		masbro_service := StubMasbroService{}
-		listener_service := NewListener(ctx, in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(ctx, logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		deployment_service.build_fn = func(dto shared_deployment.DeployRequest) (res shared_deployment.DeployStepResult, err error) {
 			cancel()
@@ -204,7 +208,7 @@ func TestDeployListener(t *testing.T) {
 
 		deployment_service := createDeploymentServiceStub()
 		masbro_service := StubMasbroService{}
-		listener_service := NewListener(ctx, in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(ctx, logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		deployment_service.build_fn = func(dto shared_deployment.DeployRequest) (res shared_deployment.DeployStepResult, err error) {
 			cancel()
@@ -235,7 +239,7 @@ func TestDeployListener(t *testing.T) {
 
 		deployment_service := createDeploymentServiceStub()
 		masbro_service := StubMasbroService{}
-		listener_service := NewListener(ctx, in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(ctx, logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		deployment_service.build_fn = func(dto shared_deployment.DeployRequest) (res shared_deployment.DeployStepResult, err error) {
 			cancel()
@@ -260,6 +264,9 @@ func TestDeployListener(t *testing.T) {
 }
 
 func TestDeployResultListener(t *testing.T) {
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
+	
 	mock_app := database.Application{}
 	mock_dp := database.ApplicationDeployment{
 		AppID: mock_app.AppID,
@@ -277,7 +284,7 @@ func TestDeployResultListener(t *testing.T) {
 
 		masbro_service := StubMasbroService{}
 		deployment_service := createDeploymentServiceStub()
-		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(context.Background(), logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		defer func () {
 			close(out_chan)
@@ -347,7 +354,7 @@ func TestDeployResultListener(t *testing.T) {
 
 		masbro_service := StubMasbroService{}
 		deployment_service := createDeploymentServiceStub()
-		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(context.Background(), logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		defer func () {
 			deployment_service.Clear()
@@ -378,7 +385,7 @@ func TestDeployResultListener(t *testing.T) {
 
 		masbro_service := StubMasbroService{}
 		deployment_service := createDeploymentServiceStub()
-		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(context.Background(), logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		defer func () {
 			deployment_service.Clear()
@@ -409,7 +416,7 @@ func TestDeployResultListener(t *testing.T) {
 
 		masbro_service := StubMasbroService{}
 		deployment_service := createDeploymentServiceStub()
-		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(context.Background(), logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		defer func () {
 			deployment_service.Clear()
@@ -463,7 +470,7 @@ func TestDeployResultListener(t *testing.T) {
 
 		masbro_service := StubMasbroService{}
 		deployment_service := createDeploymentServiceStub()
-		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(context.Background(), logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		defer func () {
 			deployment_service.Clear()
@@ -512,7 +519,7 @@ func TestDeployResultListener(t *testing.T) {
 
 		masbro_service := StubMasbroService{}
 		deployment_service := createDeploymentServiceStub()
-		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(context.Background(), logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		defer func () {
 			deployment_service.Clear()
@@ -555,7 +562,7 @@ func TestDeployResultListener(t *testing.T) {
 
 		masbro_service := StubMasbroService{}
 		deployment_service := createDeploymentServiceStub()
-		listener_service := NewListener(context.Background(), in_chan, out_chan, deployment_service, &masbro_service)
+		listener_service := NewListener(context.Background(), logger, in_chan, out_chan, deployment_service, &masbro_service)
 
 		defer func () {
 			deployment_service.Clear()

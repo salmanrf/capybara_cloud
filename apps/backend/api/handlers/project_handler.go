@@ -3,7 +3,6 @@ package handlers
 import (
 	"log/slog"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,6 +10,8 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
+
+	pkgerr "github.com/pkg/errors"
 )
 
 type project_handler struct {
@@ -38,6 +39,7 @@ func (h *project_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
+		h.logger.Error("[HandleCreate] Unable to parse request", "error", pkgerr.WithStack(err))
 		utils.ResponseWithError(
 			w,
 			http.StatusUnprocessableEntity,
@@ -49,6 +51,7 @@ func (h *project_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	_, err := body.Validate()
 	if err != nil {
+		h.logger.Error("[HandleCreate] Unable to validate request", "error", pkgerr.WithStack(err))
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -58,8 +61,8 @@ func (h *project_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.project_service.Create(user_id, body.OrgId, body.Name)
 	if err != nil {
+		h.logger.Error("[HandleCreate] Unable to create project", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", body.OrgId, "project_name", body.Name)
 		errmsg := err.Error()
-		fmt.Println("CreateProject failed", errmsg)
 		if strings.Contains(errmsg, "duplicate key") {
 			utils.ResponseWithError(w, http.StatusBadRequest, nil, "Project with this name already exists")
 		} else {
@@ -94,6 +97,7 @@ func (h *project_handler) HandleFindOne(w http.ResponseWriter, r *http.Request) 
 	project, err := h.project_service.FindById(user_id, project_id)
 
 	if err != nil {
+		h.logger.Error("[HandleFindOne] Unable to find project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusOK,
@@ -127,6 +131,7 @@ func (h *project_handler) HandleListMyProjects(w http.ResponseWriter, r *http.Re
 
 	projectuses, err := h.project_service.ListMyProjects(user_id)
 	if err != nil {
+		h.logger.Error("[HandleListMyProjects] Unable to list projects", "error", pkgerr.WithStack(err), "user_id", user_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusInternalServerError,
@@ -164,20 +169,22 @@ func (h *project_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	var body dto.UpdateProjectDto
 
 	if r.Body == nil {
-		fmt.Println("Update one project failed, empty body")
+		h.logger.Error("[HandleUpdate] Empty request body", "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
 		return
 	}
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
-		fmt.Println("Update one project failed, ", err.Error())
+		h.logger.Error("[HandleUpdate] Unable to parse request", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
 		return
 	}
 
 	if _, err := body.Validate(); err != nil {
+		h.logger.Error("[HandleUpdate] Unable to validate request", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
+		return
 	}
 
 	project, err := h.project_service.FindByIdAndRole(
@@ -187,6 +194,7 @@ func (h *project_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		h.logger.Error("[HandleUpdate] Unable to find project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusNotFound,
@@ -221,7 +229,7 @@ func (h *project_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	new_project, err := h.project_service.UpdateOne(project)
 
 	if err != nil {
-		fmt.Println("Update one project failed, ", err)
+		h.logger.Error("[HandleUpdate] Unable to update project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id, "project_name", body.Name)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusInternalServerError,
@@ -261,6 +269,7 @@ func (h *project_handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		h.logger.Error("[HandleDelete] Unable to find project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusNotFound,
@@ -293,6 +302,7 @@ func (h *project_handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	err = h.project_service.DeleteOne(project.ProjectID.String())
 
 	if err != nil {
+		h.logger.Error("[HandleDelete] Unable to delete project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusInternalServerError,

@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,7 @@ func TestApplicationService(t *testing.T) {
 
 	application_service := NewService(
 		ctx,
+		slog.Default(),
 		application_repository,
 		&project_service,
 	)

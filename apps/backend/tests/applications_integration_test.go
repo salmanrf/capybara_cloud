@@ -1,7 +1,6 @@
 package tests
 
 import (
-	locutils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -21,7 +20,6 @@ import (
 )
 
 func TestCreateApplication(t *testing.T) {
-	locutils.CreateLogger()
 	application_service := &StubApplicationService{}
 	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}

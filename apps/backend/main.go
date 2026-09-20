@@ -68,7 +68,7 @@ func setup() (func (), context.Context, locutils.Config, *slog.Logger, *pgxpool.
 		return nil, nil, cfg, nil, nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
-	fmt.Println("Database connection established")
+	logger.Debug("Database connection established")
 
 	teardown := func () {
 		log_cleanup()
@@ -86,10 +86,10 @@ func main() {
 	defer db_conn.Close()
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println("Server encountered a panic", err)
+			logger.Error("Server encountered a panic", "error", err)
 		}
+		logger.Debug("Server is stopped")
 		teardown()
-		fmt.Println("Server is stopped")
 	}()
 
 	queries := database.New(db_conn)
@@ -98,11 +98,11 @@ func main() {
 	deploy_in_chan := make(chan deployment.DeployRequest)
 	deploy_out_chan := make(chan deployment.DeployStepResult)
 	
-	user_service := user.NewService(ctx, queries)
-	auth_service := auth.NewService(ctx, user_service)
-	org_service := organization.NewService(ctx, db_conn, queries, user_service)
-	project_service := project.NewService(ctx, db_conn, queries, user_service)
-	application_service := application.NewService(ctx, application_repository, project_service)
+	user_service := user.NewService(ctx, logger, queries)
+	auth_service := auth.NewService(ctx, logger, user_service)
+	org_service := organization.NewService(ctx, logger, db_conn, queries, user_service)
+	project_service := project.NewService(ctx, logger, db_conn, queries, user_service)
+	application_service := application.NewService(ctx, logger, application_repository, project_service)
 	port_allocator_service := shared_deployment.NewPortAllocatorService()
 	docker_service, err := docker.New(
 		docker.DockerConfig{
@@ -114,12 +114,14 @@ func main() {
 		port_allocator_service,
 	)
 	if err != nil {
+		logger.Error("Unable to create docker client", "error", err)
 		teardown()
-		log.Fatal(err)
+		os.Exit(1)
 	}
 	masbro_service := masbro_worker.New(docker_service)
 	deployment_service := deployment.NewService(
 		ctx, 
+		logger,
 		docker_service, 
 		application_service, 
 		masbro_service,
@@ -129,6 +131,7 @@ func main() {
 	)
 	listener_service := deployment.NewListener(
 		ctx,
+		logger,
 		deploy_in_chan,
 		deploy_out_chan,
 		deployment_service,
@@ -148,11 +151,12 @@ func main() {
 	)
 
 	address := fmt.Sprintf(":%s", cfg.API_PORT)
-	fmt.Println("Starting Listeners")
+	logger.Debug("Starting listeners")
 	go listener_service.Listen()
-	fmt.Printf("Starting API server on %s\n", address)
+	logger.Debug("Starting API server", "address", address)
 	if err := http.ListenAndServe(address, api_server); err != nil {
+		logger.Error("Server failed", "error", err, "address", address)
 		teardown()
-		log.Fatalf("Server failed: %v", err)
+		os.Exit(1)
 	}
 }

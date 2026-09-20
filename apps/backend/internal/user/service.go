@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,12 +19,14 @@ type Service interface {
 
 type service struct {
 	ctx context.Context
+	logger *slog.Logger
 	queries *database.Queries
 }
 
-func NewService(ctx context.Context, q *database.Queries) Service {
+func NewService(ctx context.Context, logger *slog.Logger, q *database.Queries) Service {
 	return &service{
 		ctx: ctx,
+		logger: logger,
 		queries: q,
 	}
 }
@@ -43,11 +45,9 @@ func (s *service) FindById(identifier string, is_email bool) (*database.User, er
 	}
 
 	if err != nil {
-		err_msg := err.Error()
-			if strings.Contains(err_msg, "no rows") {
+			if strings.Contains(err.Error(), "no rows") {
 				return nil, nil
 			} else {
-				fmt.Println("Error finding user", err_msg)
 				return nil, errors.New("unable to find user")
 			}
 	}
@@ -59,7 +59,6 @@ func (s *service) Create(dto dto.SignupDto) (*database.User, error) {
 	hashed_password, err := auth.Hash(dto.Password)
 
 	if err != nil {
-		fmt.Println("Error at user_service.Create - hashing user password: ", err.Error())
 		return nil, err
 	}
 
@@ -71,8 +70,6 @@ func (s *service) Create(dto dto.SignupDto) (*database.User, error) {
 	})
 
 	if err != nil {
-		errr_msg := err.Error()
-		fmt.Println("Error at user_service.Create - inserting to db: ", errr_msg)
 		return nil, err
 	}
 

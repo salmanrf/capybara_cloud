@@ -3,7 +3,6 @@ package handlers
 import (
 	"log/slog"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,6 +10,8 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/organization"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
+
+	pkgerr "github.com/pkg/errors"
 )
 
 type org_handler struct {
@@ -38,6 +39,7 @@ func (h *org_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 		decoder := json.NewDecoder(r.Body)
 		if err := decoder.Decode(&body); err != nil {
+			h.logger.Error("[HandleCreate] Unable to parse request", "error", pkgerr.WithStack(err))
 			utils.ResponseWithError(
 				w,
 				http.StatusUnprocessableEntity,
@@ -49,6 +51,7 @@ func (h *org_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 		_, err := body.Validate()
 		if err != nil {
+			h.logger.Error("[HandleCreate] Unable to validate request", "error", pkgerr.WithStack(err))
 			utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 			return
 		}
@@ -58,8 +61,8 @@ func (h *org_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 		org, err := h.org_service.Create(user_id, body.Name)
 		if err != nil {
+			h.logger.Error("[HandleCreate] Unable to create organization", "error", pkgerr.WithStack(err), "user_id", user_id, "org_name", body.Name)
 			errmsg := err.Error()
-			fmt.Println("CreateOrg failed", errmsg)
 			if strings.Contains(errmsg, "duplicate key") {
 				utils.ResponseWithError(w, http.StatusBadRequest, nil, "Organization with this name already exists")	
 			} else {
@@ -85,6 +88,7 @@ func (h *org_handler) HandleFindOne(w http.ResponseWriter, r *http.Request){
 	org, err := h.org_service.FindById(user_id, org_id)
 
 	if err != nil {
+		h.logger.Error("[HandleFindOne] Unable to find organization", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", org_id)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusOK,
@@ -118,6 +122,7 @@ func (h *org_handler) HandleListMyOrganizations(w http.ResponseWriter, r *http.R
 
 	orguses, err := h.org_service.ListMyOrgs(user_id)
 	if err != nil {
+		h.logger.Error("[HandleListMyOrganizations] Unable to list organizations", "error", pkgerr.WithStack(err), "user_id", user_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusInternalServerError,
@@ -146,20 +151,22 @@ func (h *org_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	var body dto.CreateOrgDto
 
 	if r.Body == nil {
-		fmt.Println("Update one organization failed, empty body")
+		h.logger.Error("[HandleUpdate] Empty request body", "user_id", user_id, "org_id", org_id)
 		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
 		return
 	}
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
-		fmt.Println("Update one organization failed, ", err.Error())
+		h.logger.Error("[HandleUpdate] Unable to parse request", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", org_id)
 		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
 		return
 	}
 
 	if _, err := body.Validate(); err != nil {
+		h.logger.Error("[HandleUpdate] Unable to validate request", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", org_id)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
+		return
 	}
 
 	org, err := h.org_service.FindByIdAndRole(
@@ -169,6 +176,7 @@ func (h *org_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		h.logger.Error("[HandleUpdate] Unable to find organization", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", org_id)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusNotFound,
@@ -203,7 +211,7 @@ func (h *org_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	new_org, err := h.org_service.UpdateOne(org)
 	
 	if err != nil {
-		fmt.Println("Update one org failed, ", err)
+		h.logger.Error("[HandleUpdate] Unable to update organization", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", org_id, "org_name", body.Name)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusInternalServerError,
@@ -234,6 +242,7 @@ func (h *org_handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		h.logger.Error("[HandleDelete] Unable to find organization", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", org_id)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusNotFound,
@@ -266,6 +275,7 @@ func (h *org_handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	err = h.org_service.DeleteOne(org.OrgID.String())
 
 	if err != nil {
+		h.logger.Error("[HandleDelete] Unable to delete organization", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", org_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusInternalServerError,
