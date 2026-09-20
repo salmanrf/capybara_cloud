@@ -3,7 +3,7 @@ package project
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -25,14 +25,16 @@ type Service interface {
 
 type service struct {
 	ctx context.Context
+	logger *slog.Logger
 	conn *pgxpool.Pool
 	queries *database.Queries
 	user_service user.Service
 }
 
-func NewService(ctx context.Context, conn *pgxpool.Pool, queries *database.Queries, user_service user.Service) Service {
+func NewService(ctx context.Context, logger *slog.Logger, conn *pgxpool.Pool, queries *database.Queries, user_service user.Service) Service {
 	return &service{
 		ctx,
+		logger,
 		conn,
 		queries,
 		user_service,
@@ -66,7 +68,6 @@ func (s *service) Create(user_id string, org_id string, project_name  string) (*
 	})
 
 	if err != nil {
-		fmt.Println("Error creating project", user.UserID, project_name, err)
 		return nil, err
 	}
 
@@ -80,7 +81,6 @@ func (s *service) Create(user_id string, org_id string, project_name  string) (*
 	)
 
 	if err != nil {
-		fmt.Println("Error creating project", user.UserID, project_name, err)
 		return nil, err
 	}
 
@@ -102,7 +102,6 @@ func (s *service) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*databa
 	})
 
 	if err != nil {
-		fmt.Println("Error updating project", project.ProjectID.String(), project.Name, err)
 		return nil, err
 	}
 
@@ -161,11 +160,9 @@ func (s *service) FindById(user_id string, project_id string) (*database.FindOne
 	})
 
 	if err != nil {
-		err_msg := err.Error()
-			if strings.Contains(err_msg, "no rows") {
+			if strings.Contains(err.Error(), "no rows") {
 				return nil, nil
 			} else {
-				fmt.Println("Error finding project", err_msg)
 				return nil, errors.New("unable to find project")
 			}
 	}
@@ -185,11 +182,9 @@ func (s *service) FindByIdAndRole(user_id string, project_id string, roles []str
 	})
 
 	if err != nil {
-		err_msg := err.Error()
-			if strings.Contains(err_msg, "no rows") {
+			if strings.Contains(err.Error(), "no rows") {
 				return nil, nil
 			} else {
-				fmt.Println("Error finding user", err_msg)
 				return nil, errors.New("unable to find user")
 			}
 	}
@@ -203,8 +198,7 @@ func (s *service) ListMyProjects(user_id string) ([]database.FindProjectsForUser
 
 	projectus, err := s.queries.FindProjectsForUser(s.ctx, user_uuid)
 	if err != nil {
-		errmsg := err.Error()		
-		fmt.Println("Error at project_service.ListMyProjects", errmsg)
+		errmsg := err.Error()
 		if strings.Contains(errmsg, "no rows") {
 			return []database.FindProjectsForUserRow{}, nil
 		}

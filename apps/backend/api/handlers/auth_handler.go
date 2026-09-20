@@ -3,7 +3,6 @@ package handlers
 import (
 	"log/slog"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -13,6 +12,8 @@ import (
 	auth_utils "github.com/salmanrf/capybara-cloud/apps/backend/pkg/auth"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
+
+	pkgerr "github.com/pkg/errors"
 )
 
 type auth_handler struct {
@@ -41,7 +42,7 @@ func (h *auth_handler) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	sid_cookie, err := r.Cookie("sid")
 
 	if err != nil {
-		fmt.Println("Error extracting session cookie", err.Error())
+		h.logger.Error("[HandleGetMe] Missing session cookie", "error", pkgerr.WithStack(err))
 		utils.ResponseWithError(w, http.StatusUnauthorized, nil, "Unauthorized")
 		return
 	}
@@ -49,7 +50,7 @@ func (h *auth_handler) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	sub, err := h.jwt_utils.ValidateJWT(sid_cookie.Value, os.Getenv("AUTH_JWT_SECRET"))
 
 	if err != nil {
-		fmt.Println("Error validating session JWT", err.Error())
+		h.logger.Error("[HandleGetMe] Invalid session JWT", "error", pkgerr.WithStack(err))
 		utils.ResponseWithError(w, http.StatusUnauthorized, nil, "Unauthorized")
 		return
 	}
@@ -57,6 +58,7 @@ func (h *auth_handler) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	user, err := h.auth_service.GetMe(sub)
 
 	if err != nil {
+		h.logger.Error("[HandleGetMe] Unable to find user", "error", pkgerr.WithStack(err), "user_id", sub)
 		utils.ResponseWithError(
 			w,
 			http.StatusNotFound,
@@ -79,14 +81,14 @@ func (h *auth_handler) HandleSignup(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
-		fmt.Println("Signup failed, parsing", err.Error())
+		h.logger.Error("[HandleSignup] Unable to parse request", "error", pkgerr.WithStack(err))
 		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
 		return
 	}
 
 	_, err := body.Validate()
 	if err != nil {
-		fmt.Println("Signup failed, validation", err.Error())
+		h.logger.Error("[HandleSignup] Unable to validate request", "error", pkgerr.WithStack(err))
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -94,13 +96,13 @@ func (h *auth_handler) HandleSignup(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.user_service.FindById(body.Email, true)
 
 	if err != nil {
-		fmt.Println("Singup failed", err.Error())
+		h.logger.Error("[HandleSignup] Unable to find existing user", "error", pkgerr.WithStack(err), "email", body.Email)
 		utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
 		return
 	}
 
 	if existing != nil {
-		fmt.Println("Signup failed, user already exists")
+		h.logger.Error("[HandleSignup] User already exists", "email", body.Email)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, "This user already exists")
 		return
 	}
@@ -108,8 +110,9 @@ func (h *auth_handler) HandleSignup(w http.ResponseWriter, r *http.Request) {
 	_, err = h.user_service.Create(body)
 
 	if err != nil {
-		fmt.Println("Signup failed", err.Error())
+		h.logger.Error("[HandleSignup] Unable to create user", "error", pkgerr.WithStack(err), "email", body.Email, "username", body.Username)
 		utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
+		return
 	}
 
 	utils.ResponseWithSuccess[any](w, http.StatusOK, nil, "Signed up successfully")
@@ -120,14 +123,14 @@ func (h *auth_handler) HandleSignin(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
-		fmt.Println("Failed to decode request body", err)
-
+		h.logger.Error("[HandleSignin] Unable to parse request", "error", pkgerr.WithStack(err))
 		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
 		return
 	}
 
 	_, err := body.Validate()
 	if err != nil {
+		h.logger.Error("[HandleSignin] Unable to validate request", "error", pkgerr.WithStack(err))
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -135,13 +138,13 @@ func (h *auth_handler) HandleSignin(w http.ResponseWriter, r *http.Request) {
 	user, err := h.user_service.FindById(body.Email, true)
 
 	if err != nil {
-		fmt.Println("Error finding user", err)
+		h.logger.Error("[HandleSignin] Unable to find user", "error", pkgerr.WithStack(err), "email", body.Email)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, "Incorrect username/email")
 		return
 	}
 
 	if user == nil {
-		fmt.Println("Error finding user")
+		h.logger.Error("[HandleSignin] User not found", "email", body.Email)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, "Incorrect username/email")
 		return
 	}
@@ -149,13 +152,13 @@ func (h *auth_handler) HandleSignin(w http.ResponseWriter, r *http.Request) {
 	password_match, err := auth_utils.HashCompare(body.Password, user.HashedPassword)
 
 	if err != nil {
-		fmt.Println("Error password compare", err)
-
+		h.logger.Error("[HandleSignin] Unable to compare password hash", "error", pkgerr.WithStack(err), "user_id", user.UserID)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, "Incorrect username/email")
 		return
 	}
 
 	if !password_match {
+		h.logger.Error("[HandleSignin] Password mismatch", "user_id", user.UserID)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, "Incorrect username/email")
 		return
 	}
@@ -163,8 +166,7 @@ func (h *auth_handler) HandleSignin(w http.ResponseWriter, r *http.Request) {
 	jwt_string, err := h.jwt_utils.MakeJWT(user.UserID.String(), os.Getenv("AUTH_JWT_SECRET"), time.Hour * 24)
 
 	if err != nil {
-		fmt.Println("Error building jwt for signin", err.Error())
-
+		h.logger.Error("[HandleSignin] Unable to build JWT", "error", pkgerr.WithStack(err), "user_id", user.UserID)
 		utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
 		return
 	}

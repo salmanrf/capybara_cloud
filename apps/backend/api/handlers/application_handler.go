@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -12,6 +11,8 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/application"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
+
+	pkgerr "github.com/pkg/errors"
 )
 
 type app_handler struct {
@@ -42,15 +43,7 @@ func (h *app_handler) HandleFindOne(w http.ResponseWriter, r *http.Request) {
 	app, err :=  h.app_service.FindOneComplete(app_id, user_id)
 
 	if err != nil {
-		h.logger.Error(
-			"Unable to find application",
-			"error",
-			err,
-			"app_id",
-			app_id,
-			"user_id",
-			user_id,
-		)
+		h.logger.Error("[HandleFindOne] Unable to find application", "error", pkgerr.WithStack(err), "user_id", user_id, "app_id", app_id)
 		errmsg := err.Error()
 		switch errmsg {
 		case "permission_denied":
@@ -106,14 +99,7 @@ func (h *app_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
-		h.logger.Error(
-			errors.Join(
-				errors.New("[HandleCreate] Unable to parse request"),
-				err,
-			).Error(),
-			"user_id", user_id, 
-			"body", r.Body,
-		)
+		h.logger.Error("[HandleCreate] Unable to parse request", "error", pkgerr.WithStack(err), "user_id", user_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusUnprocessableEntity,
@@ -125,14 +111,7 @@ func (h *app_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	_, err := body.Validate()
 	if err != nil {
-		h.logger.Error(
-			errors.Join(
-				errors.New("[HandleCreate] Unable to validate request"),
-				err,
-			).Error(),
-			"user_id", user_id, 
-			"body", r.Body,
-		)
+		h.logger.Error("[HandleCreate] Unable to validate request", "error", pkgerr.WithStack(err), "user_id", user_id)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -143,13 +122,7 @@ func (h *app_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		h.logger.Error(
-			errors.Join(
-				errors.New("[HandleCreate] Unable to create application"),
-				err,
-			).Error(),
-			"user_id", user_id, 
-		)
+		h.logger.Error("[HandleCreate] Unable to create application", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", body.ProjectID, "name", body.Name)
 		if err.Error() == "permission_denied" {
 			utils.ResponseWithError(
 				w, 
@@ -176,6 +149,7 @@ func (h *app_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 
 	user_id, _ := r.Context().Value("user_id").(string)
 	if user_id == "" {
+		h.logger.Error("[HandleUpdate] Missing user_id in context", "app_id", app_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusUnauthorized,
@@ -188,6 +162,7 @@ func (h *app_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	var body dto.UpdateApplicationDto
 	if err := decoder.Decode(&body); err != nil {
+		h.logger.Error("[HandleUpdate] Unable to parse request", "error", pkgerr.WithStack(err), "user_id", user_id, "app_id", app_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusUnprocessableEntity,
@@ -197,6 +172,7 @@ func (h *app_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 	if _, err := body.Validate(); err != nil {
+		h.logger.Error("[HandleUpdate] Unable to validate request", "error", pkgerr.WithStack(err), "user_id", user_id, "app_id", app_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusBadRequest,
@@ -213,6 +189,7 @@ func (h *app_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
+		h.logger.Error("[HandleUpdate] Unable to update application", "error", pkgerr.WithStack(err), "user_id", user_id, "app_id", app_id, "name", body.Name)
 		errmsg := err.Error()
 		if errmsg == "permission_denied" {
 			utils.ResponseWithError(
@@ -257,6 +234,7 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 	
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
+		h.logger.Error("[HandleCreateConfig] Unable to parse request", "error", pkgerr.WithStack(err), "user_id", user_id, "app_id", app_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusUnprocessableEntity,
@@ -268,6 +246,7 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 
 	_, err := body.Validate()
 	if err != nil {
+		h.logger.Error("[HandleCreateConfig] Unable to validate request", "error", pkgerr.WithStack(err), "user_id", user_id, "app_id", app_id)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -281,6 +260,7 @@ func (h *app_handler) HandleCreateConfig(w http.ResponseWriter, r *http.Request)
 		body,
 	)
 	if err != nil {
+		h.logger.Error("[HandleCreateConfig] Unable to create application config", "error", pkgerr.WithStack(err), "user_id", user_id, "app_id", app_id, "port", body.Port)
 		errmsg := err.Error()
 		if errmsg == "permission_denied" {
 			utils.ResponseWithError(
@@ -335,6 +315,7 @@ func (h *app_handler) HandleFindOneConfig(w http.ResponseWriter, r *http.Request
 	config, err := h.app_service.FindOneConfig(app_id, user_id)
 
 	if err != nil {
+		h.logger.Error("[HandleFindOneConfig] Unable to find application config", "error", pkgerr.WithStack(err), "user_id", user_id, "app_id", app_id)
 		errmsg := err.Error()
 		switch errmsg {
 		case "permission_denied":

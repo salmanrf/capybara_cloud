@@ -3,7 +3,7 @@ package organization
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -25,6 +25,7 @@ type Service interface {
 
 type service struct {
 	ctx context.Context
+	logger *slog.Logger
 	conn *pgxpool.Pool
 	queries *database.Queries
 	user_service user.Service
@@ -32,12 +33,14 @@ type service struct {
 
 func NewService(
 	ctx context.Context, 
+	logger *slog.Logger,
 	conn *pgxpool.Pool,
 	queries *database.Queries, 
 	user_service user.Service,
 ) Service {
 	return &service{
 		ctx,
+		logger,
 		conn,
 		queries,
 		user_service,
@@ -54,7 +57,6 @@ func (s *service) Create(user_id string, org_name  string) (*database.Organizati
 	organization, err := s.queries.CreateOrganization(s.ctx, org_name)
 
 	if err != nil {
-		fmt.Println("Error creating organization", user.UserID, org_name, err)
 		return nil, err
 	}
 
@@ -68,7 +70,6 @@ func (s *service) Create(user_id string, org_name  string) (*database.Organizati
 	)
 
 	if err != nil {
-		fmt.Println("Error creating organization", user.UserID, org_name, err)
 		return nil, err
 	}
 	
@@ -88,7 +89,6 @@ func (s *service) UpdateOne(dto *database.FindOneOrganizationByIdAndRoleRow) (*d
 	})
 
 	if err != nil {
-		fmt.Println("Error updating organization", organization.OrgID.String(), organization.Name, err)
 		return nil, err
 	}
 
@@ -147,11 +147,9 @@ func (s *service) FindById(user_id string, org_id string) (*database.FindOneOrga
 	})
 
 	if err != nil {
-		err_msg := err.Error()
-			if strings.Contains(err_msg, "no rows") {
+			if strings.Contains(err.Error(), "no rows") {
 				return nil, nil
 			} else {
-				fmt.Println("Error finding organization", err_msg)
 				return nil, errors.New("unable to find organization")
 			}
 	}
@@ -171,11 +169,9 @@ func (s *service) FindByIdAndRole(user_id string, org_id string, roles []string)
 	})
 
 	if err != nil {
-		err_msg := err.Error()
-			if strings.Contains(err_msg, "no rows") {
+			if strings.Contains(err.Error(), "no rows") {
 				return nil, nil
 			} else {
-				fmt.Println("Error finding user", err_msg)
 				return nil, errors.New("unable to find user")
 			}
 	}
@@ -189,8 +185,7 @@ func (s *service) ListMyOrgs(user_id string) ([]database.FindOrganizationsForUse
 
 	orgus, err := s.queries.FindOrganizationsForUser(s.ctx, user_uuid)
 	if err != nil {
-		errmsg := err.Error()		
-		fmt.Println("Error at organization_service.ListMyOrgs", errmsg)
+		errmsg := err.Error()
 		if strings.Contains(errmsg, "no rows") {
 			return []database.FindOrganizationsForUserRow{}, nil
 		}

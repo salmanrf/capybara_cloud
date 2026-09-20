@@ -10,6 +10,8 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/deployment"
 	config "github.com/salmanrf/capybara-cloud/apps/backend/pkg/utils"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
+
+	pkgerr "github.com/pkg/errors"
 )
 
 type deployment_handler struct {
@@ -31,6 +33,7 @@ func NewAppDeploymentHandlers(logger *slog.Logger, deployment_service deployment
 func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r *http.Request) {
 	content_type := r.Header.Get("Content-Type");
 	if !strings.HasPrefix(content_type, "multipart/form-data") {
+		h.logger.Error("[HandleCreateOneDeployment] Invalid content type", "content_type", content_type)
 		utils.ResponseWithError(
 			w,
 			http.StatusBadRequest,
@@ -42,6 +45,7 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 
 	content_length, err := strconv.Atoi(r.Header.Get("Content-Length"));
 	if err != nil || content_length == 0 {
+		h.logger.Error("[HandleCreateOneDeployment] Invalid content length", "error", pkgerr.WithStack(err), "content_length", content_length)
 		utils.ResponseWithError(
 			w,
 			http.StatusBadRequest,
@@ -52,6 +56,7 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 	}
 	cfg := config.GetConfig()
 	if content_length > cfg.MAX_DEPLOY_FORM_SIZE {
+		h.logger.Error("[HandleCreateOneDeployment] Form payload too large", "content_length", content_length, "max", cfg.MAX_DEPLOY_FORM_SIZE)
 		utils.ResponseWithError(
 			w,
 			http.StatusRequestEntityTooLarge,
@@ -63,6 +68,7 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 
 	err = r.ParseMultipartForm(int64(cfg.MAX_DEPLOY_FORM_SIZE))
 	if err != nil {
+		h.logger.Error("[HandleCreateOneDeployment] Unable to parse multipart form", "error", pkgerr.WithStack(err))
 		errmsg := err.Error()
 		utils.ResponseWithError(
 			w,
@@ -75,6 +81,7 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 
 	bundle_file, file_headers, err := r.FormFile("bundle")
 	if err != nil {
+		h.logger.Error("[HandleCreateOneDeployment] Unable to read bundle file", "error", pkgerr.WithStack(err))
 		errmsg := err.Error()
 		utils.ResponseWithError(
 			w,
@@ -94,6 +101,7 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 		return
 	}
 	if file_headers.Size > int64(cfg.MAX_DEPLOY_BUNDLE_SIZE) {
+		h.logger.Error("[HandleCreateOneDeployment] Bundle file too large", "size", file_headers.Size, "max", cfg.MAX_DEPLOY_BUNDLE_SIZE)
 		utils.ResponseWithError(
 			w,
 			http.StatusRequestEntityTooLarge,
@@ -116,7 +124,6 @@ func (h *deployment_handler) HandleCreateOneDeployment(w http.ResponseWriter, r 
 		case "permission_denied":
 			utils.ResponseWithError(w, http.StatusForbidden, nil, "Permission denied")
 		default:
-			fmt.Println("Error: ", err)
 			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
 		}
 		return

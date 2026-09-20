@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"log/slog"
 	"bytes"
 	"context"
 	"os"
@@ -25,6 +26,7 @@ func TestDeployExtract(t *testing.T) {
 	app_service := &application.StubApplicationService{}
 	deployment_service := NewService(
 		ctx,
+		slog.Default(),
 		&StubDocker{},
 		app_service,
 		&StubMasbroService{},

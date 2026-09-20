@@ -37,7 +37,7 @@ type service struct {
 	port_service shared_deployment.PortAllocatorService
 	deployment_repository DeploymentRepository
 	deploy_chan chan DeployRequest
-	logger slog.Logger
+	logger *slog.Logger
 }	
 
 type Service interface {
@@ -54,6 +54,7 @@ type Service interface {
 
 func NewService(
 	ctx context.Context,
+	logger *slog.Logger,
 	docker_service docker.Docker,
 	app_service application.Service,
 	masbro_service masbro_worker.Service,
@@ -70,8 +71,6 @@ func NewService(
 	if err != nil {
 		panic(err)
 	}
-
-	logger := locutils.Logger
 
 	return &service{
 		ctx,
@@ -322,7 +321,7 @@ func (s *service) Build(dto DeployRequest) (res DeployStepResult, err error) {
 	defer func () {
 		err := os.RemoveAll(dep.BuildPath)
 		if err != nil {
-			fmt.Println("[Build] Cleanup: unexpected error", err)
+			s.logger.Error("[Deploy Step - Build] Unable to cleanup build directory", "error", err, "app_id", app.AppID, "deployment_id", dep.AppDpID, "build_path", dep.BuildPath)
 		}
 	}()
 
@@ -422,7 +421,7 @@ func (s *service) Push(dto DeployRequest) (res DeployStepResult, err error) {
 	repotag := fmt.Sprintf("%s:%s", dep.ContainerRepository.String, dep.ContainerTag.String)
 	image := utils.FullImageRef(dep)
 
-	s.logger.Info(
+	s.logger.Debug(
 		"[Deploy Step - Push] Pushing image",
 		"app_id", app.AppID,
 		"dep_id", dep.AppDpID,
@@ -491,7 +490,7 @@ func (s *service) Start(dto DeployRequest) (DeployStepResult, error) {
 		Status: shared_deployment.DEPLOY_INSTANCE_STATUS_STOPPED,
 	}
 
-	s.logger.Info(
+	s.logger.Debug(
 		"[Deploy Step - Start] Starting Container",
 		"app_id", app.AppID,
 		"dep_id", dep.AppDpID,
@@ -666,7 +665,6 @@ func saveDeployArtifacts(
 	}
 	file.Close()
 	if err != io.EOF {
-		fmt.Println("Error writing bundle file", full_path, err)
 		return "", err
 	} 
 
