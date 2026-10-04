@@ -16,8 +16,8 @@ import (
 
 type Service interface {
 	Create(user_id string, org_id string, project_name string) (*database.Project, error)
-	UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*database.Project, error)
-	DeleteOne(project_id string) error
+	UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error)
+	DeleteOne(user_id string, project_id string) error
 	FindById(user_id string, project_id string) (*database.FindOneProjectByIdRow, error)
 	FindByIdAndRole(user_id string, project_id string, roles []string) (*database.FindOneProjectByIdAndRoleRow, error)
 	ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error)
@@ -79,15 +79,28 @@ func (s *service) Create(user_id string, org_id string, project_name  string) (*
 	)
 }
 
-func (s *service) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*database.Project, error) {
+func (s *service) UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error) {
+	existing, err := s.FindByIdAndRole(user_id, project_id, []string{})
+	if err != nil || existing == nil {
+		return nil, errors.New("invalid_role")
+	}
+
+	allowed_roles := []string{
+		"owner",
+		"editor",
+	}
+	if !slices.Contains(allowed_roles, existing.Role.String) {
+		return nil, errors.New("invalid_role")
+	}
+
 	updated_at := pgtype.Timestamp{
 		Time: time.Now(),
 		Valid: true,
 	}
 
 	project, err := s.repository.UpdateOne(database.UpdateOneProjectParams{
-		ProjectID: dto.ProjectID,
-		Name: dto.Name.String,
+		ProjectID: existing.ProjectID,
+		Name: project_name,
 		UpdatedAt: updated_at,
 	})
 
@@ -98,11 +111,21 @@ func (s *service) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*databa
 	return project, nil
 }
 
-func (s *service) DeleteOne(project_id string) error {
-	project_uuid := pgtype.UUID{}
-	project_uuid.Scan(project_id)
+func (s *service) DeleteOne(user_id string, project_id string) error {
+	existing, err := s.FindByIdAndRole(user_id, project_id, []string{})
+	if err != nil || existing == nil {
+		return errors.New("invalid_role")
+	}
 
-	return s.repository.DeleteProjectWithMembers(project_uuid)
+	allowed_roles := []string{
+		"owner",
+		"editor",
+	}
+	if !slices.Contains(allowed_roles, existing.Role.String) {
+		return errors.New("invalid_role")
+	}
+
+	return s.repository.DeleteProjectWithMembers(existing.ProjectID)
 }
 
 func (s *service) FindById(user_id string, project_id string) (*database.FindOneProjectByIdRow, error) {
@@ -139,11 +162,11 @@ func (s *service) FindByIdAndRole(user_id string, project_id string, roles []str
 	})
 
 	if err != nil {
-			if strings.Contains(err.Error(), "no rows") {
-				return nil, nil
-			} else {
-				return nil, errors.New("unable to find user")
-			}
+		if strings.Contains(err.Error(), "no rows") {
+			return nil, nil
+		} else {
+			return nil, errors.New("unable to find user")
+		}
 	}
 
 	return project_res, nil

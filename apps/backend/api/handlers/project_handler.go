@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
@@ -63,9 +62,12 @@ func (h *project_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("[HandleCreate] Unable to create project", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", body.OrgId, "project_name", body.Name)
 		errmsg := err.Error()
-		if strings.Contains(errmsg, "duplicate key") {
+		switch {
+		case errmsg == "invalid_role":
+			utils.ResponseWithError(w, http.StatusForbidden, nil, "Insufficient permission to create project")
+		case strings.Contains(errmsg, "duplicate key"):
 			utils.ResponseWithError(w, http.StatusBadRequest, nil, "Project with this name already exists")
-		} else {
+		default:
 			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
 		}
 		return
@@ -187,55 +189,16 @@ func (h *project_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.project_service.FindByIdAndRole(
-		user_id,
-		project_id,
-		[]string{"owner"},
-	)
-
-	if err != nil {
-		h.logger.Error("[HandleUpdate] Unable to find project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusNotFound,
-			nil,
-			"Project not found",
-		)
-		return
-	}
-
-	if project == nil {
-		utils.ResponseWithError(
-			w,
-			http.StatusNotFound,
-			nil,
-			"Project not found",
-		)
-		return
-	}
-
-	if project.Role.String != "owner" {
-		utils.ResponseWithError(
-			w,
-			http.StatusForbidden,
-			nil,
-			"Insufficient permission to update projectanization",
-		)
-		return
-	}
-
-	project.Name = pgtype.Text{String: body.Name, Valid: true}
-
-	new_project, err := h.project_service.UpdateOne(project)
+	new_project, err := h.project_service.UpdateOne(user_id, project_id, body.Name)
 
 	if err != nil {
 		h.logger.Error("[HandleUpdate] Unable to update project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id, "project_name", body.Name)
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusInternalServerError,
-			nil,
-			"Internal server error",
-		)
+		switch err.Error() {
+		case "invalid_role":
+			utils.ResponseWithError(w, http.StatusForbidden, nil, "Insufficient permission to update project")
+		default:
+			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
+		}
 		return
 	}
 
@@ -262,53 +225,16 @@ func (h *project_handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.project_service.FindByIdAndRole(
-		user_id,
-		project_id,
-		[]string{"owner"},
-	)
-
-	if err != nil {
-		h.logger.Error("[HandleDelete] Unable to find project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusNotFound,
-			nil,
-			"Project not found",
-		)
-		return
-	}
-
-	if project == nil {
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusNoContent,
-			nil,
-			"Project updated successfuly",
-		)
-		return
-	}
-
-	if project.Role.String != "owner" {
-		utils.ResponseWithError(
-			w,
-			http.StatusForbidden,
-			nil,
-			"Insufficient permission to update projectanization",
-		)
-		return
-	}
-
-	err = h.project_service.DeleteOne(project.ProjectID.String())
+	err := h.project_service.DeleteOne(user_id, project_id)
 
 	if err != nil {
 		h.logger.Error("[HandleDelete] Unable to delete project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
-		utils.ResponseWithError(
-			w,
-			http.StatusInternalServerError,
-			nil,
-			"Internal server error",
-		)
+		switch err.Error() {
+		case "invalid_role":
+			utils.ResponseWithError(w, http.StatusForbidden, nil, "Insufficient permission to delete project")
+		default:
+			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
+		}
 		return
 	}
 

@@ -96,12 +96,17 @@ type StubProjectService struct {
 	find_by_id_error error
 	find_by_id_and_role_return *database.FindOneProjectByIdAndRoleRow
 	find_by_id_and_role_error error
+	find_by_id_and_role_n_calls int
 	update_one_n_calls int
-	update_one_call_args []*database.FindOneProjectByIdAndRoleRow 
+	update_one_call_args [][]string
 	delete_one_n_calls int
-	delete_one_call_args []string
+	delete_one_call_args [][]string
 	delete_one_err error
 } 
+
+func (s *StubProjectService) Clear() {
+	*s = StubProjectService{}
+}
 
 func (s *StubProjectService) Create(user_id string, org_id, project_name string) (*database.Project, error) {
 	s.create_n_calls += 1
@@ -110,16 +115,16 @@ func (s *StubProjectService) Create(user_id string, org_id, project_name string)
 	return s.create_return, s.create_err
 }
 
-func (s *StubProjectService) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*database.Project, error) {
+func (s *StubProjectService) UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error) {
 	s.update_one_n_calls += 1
-	s.update_one_call_args = append(s.update_one_call_args, dto) 
+	s.update_one_call_args = append(s.update_one_call_args, []string{user_id, project_id, project_name})
 	
 	return s.update_one_return, s.update_one_err
 }
 
-func (s *StubProjectService) DeleteOne(org_id string) error {
+func (s *StubProjectService) DeleteOne(user_id string, project_id string) error {
 	s.delete_one_n_calls += 1
-	s.delete_one_call_args = append(s.delete_one_call_args, org_id)
+	s.delete_one_call_args = append(s.delete_one_call_args, []string{user_id, project_id})
 	
 	return s.delete_one_err
 }
@@ -129,6 +134,7 @@ func (s *StubProjectService) FindById(user_id string, org_id string) (*database.
 }
 
 func (s *StubProjectService) FindByIdAndRole(user_id string, org_id string, roles []string) (*database.FindOneProjectByIdAndRoleRow, error) {
+	s.find_by_id_and_role_n_calls += 1
 	return s.find_by_id_and_role_return, s.find_by_id_and_role_error
 }
 

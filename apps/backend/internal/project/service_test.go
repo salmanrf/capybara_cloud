@@ -260,21 +260,93 @@ func TestProjectServiceDeleteOne(t *testing.T) {
 	project_repository := &StubProjectRepository{}
 	project_service := NewService(ctx, slog.Default(), project_repository, &StubUserService{}, &StubOrgService{})
 
-	cases := []struct {
+	t.Run("should reject the deletion with 'invalid_role' when the member is not an owner or editor", func(t *testing.T) {
+		tests := []struct {
+			role string
+		}{
+			{"viewer"},
+			{"kambing"},
+		}
+
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("role: '%s'", tt.role), func(t *testing.T) {
+				defer project_repository.Clear()
+
+				project_repository.find_one_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
+					ProjectID: test_uuid(test_project_id),
+					Role:      pgtype.Text{String: tt.role, Valid: true},
+				}
+
+				got_err := project_service.DeleteOne(test_user_id, test_project_id)
+
+				assert_error(t, got_err, errors.New("invalid_role"))
+
+				got_find_args := project_repository.find_one_by_id_and_role_call_args
+				want_find_args := database.FindOneProjectByIdAndRoleParams{ProjectID: test_uuid(test_project_id), UserID: test_uuid(test_user_id)}
+				if len(got_find_args) != 1 {
+					t.Fatalf("got %d FindOneByIdAndRole calls, want 1", len(got_find_args))
+				}
+				if got_find_args[0] != want_find_args {
+					t.Errorf("got params %v, want %v", got_find_args[0], want_find_args)
+				}
+
+				got_n_calls := project_repository.delete_project_with_members_n_calls
+				want_n_calls := 0
+				if got_n_calls != want_n_calls {
+					t.Errorf("got %d DeleteProjectWithMembers calls, want %d", got_n_calls, want_n_calls)
+				}
+			})
+		}
+	})
+
+	lookup_cases := []struct {
 		name     string
 		repo_err error
 	}{
-		{"should delete the project with its members", nil},
-		{"should return the repository error", errors.New("db unreachable")},
+		{"should reject the deletion with 'invalid_role' when the user is not a project member", pgx.ErrNoRows},
+		{"should reject the deletion with 'invalid_role' when the project lookup fails", errors.New("db down")},
+	}
+
+	for _, c := range lookup_cases {
+		t.Run(c.name, func(t *testing.T) {
+			defer project_repository.Clear()
+
+			project_repository.find_one_by_id_and_role_return = nil
+			project_repository.find_one_by_id_and_role_err = c.repo_err
+
+			got_err := project_service.DeleteOne(test_user_id, test_project_id)
+
+			assert_error(t, got_err, errors.New("invalid_role"))
+
+			got_n_calls := project_repository.delete_project_with_members_n_calls
+			want_n_calls := 0
+			if got_n_calls != want_n_calls {
+				t.Errorf("got %d DeleteProjectWithMembers calls, want %d", got_n_calls, want_n_calls)
+			}
+		})
+	}
+
+	cases := []struct {
+		name     string
+		role     string
+		repo_err error
+	}{
+		{"should delete the project with its members as owner", "owner", nil},
+		{"should delete the project with its members as editor", "editor", nil},
+		{"should return the repository error", "owner", errors.New("db unreachable")},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			defer project_repository.Clear()
 
+			project_repository.find_one_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
+				ProjectID: test_uuid(test_project_id),
+				Role:      pgtype.Text{String: c.role, Valid: true},
+			}
 			project_repository.delete_project_with_members_err = c.repo_err
 
-			err := project_service.DeleteOne(test_project_id)
+			err := project_service.DeleteOne(test_user_id, test_project_id)
 
 			got_error := err
 			want_error := c.repo_err
@@ -455,31 +527,105 @@ func TestProjectServiceUpdateOne(t *testing.T) {
 	project_repository := &StubProjectRepository{}
 	project_service := NewService(ctx, slog.Default(), project_repository, &StubUserService{}, &StubOrgService{})
 
-	input := &database.FindOneProjectByIdAndRoleRow{
-		ProjectID: test_uuid(test_project_id),
-		Name:      pgtype.Text{String: "renamed", Valid: true},
+	t.Run("should reject the update with 'invalid_role' when the member is not an owner or editor", func(t *testing.T) {
+		tests := []struct {
+			role string
+		}{
+			{"viewer"},
+			{"kambing"},
+		}
+
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("role: '%s'", tt.role), func(t *testing.T) {
+				defer project_repository.Clear()
+
+				project_repository.find_one_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
+					ProjectID: test_uuid(test_project_id),
+					Role:      pgtype.Text{String: tt.role, Valid: true},
+				}
+
+				got_return, got_err := project_service.UpdateOne(test_user_id, test_project_id, "renamed")
+
+				assert_error(t, got_err, errors.New("invalid_role"))
+				if got_return != nil {
+					t.Errorf("got project %v, want nil", got_return)
+				}
+
+				got_find_args := project_repository.find_one_by_id_and_role_call_args
+				want_find_args := database.FindOneProjectByIdAndRoleParams{ProjectID: test_uuid(test_project_id), UserID: test_uuid(test_user_id)}
+				if len(got_find_args) != 1 {
+					t.Fatalf("got %d FindOneByIdAndRole calls, want 1", len(got_find_args))
+				}
+				if got_find_args[0] != want_find_args {
+					t.Errorf("got params %v, want %v", got_find_args[0], want_find_args)
+				}
+
+				got_n_calls := project_repository.update_one_n_calls
+				want_n_calls := 0
+				if got_n_calls != want_n_calls {
+					t.Errorf("got %d UpdateOne calls, want %d", got_n_calls, want_n_calls)
+				}
+			})
+		}
+	})
+
+	lookup_cases := []struct {
+		name     string
+		repo_err error
+	}{
+		{"should reject the update with 'invalid_role' when the user is not a project member", pgx.ErrNoRows},
+		{"should reject the update with 'invalid_role' when the project lookup fails", errors.New("db down")},
 	}
+
+	for _, c := range lookup_cases {
+		t.Run(c.name, func(t *testing.T) {
+			defer project_repository.Clear()
+
+			project_repository.find_one_by_id_and_role_return = nil
+			project_repository.find_one_by_id_and_role_err = c.repo_err
+
+			got_return, got_err := project_service.UpdateOne(test_user_id, test_project_id, "renamed")
+
+			assert_error(t, got_err, errors.New("invalid_role"))
+			if got_return != nil {
+				t.Errorf("got project %v, want nil", got_return)
+			}
+
+			got_n_calls := project_repository.update_one_n_calls
+			want_n_calls := 0
+			if got_n_calls != want_n_calls {
+				t.Errorf("got %d UpdateOne calls, want %d", got_n_calls, want_n_calls)
+			}
+		})
+	}
+
 	updated := &database.Project{ProjectID: test_uuid(test_project_id), Name: "renamed"}
 
 	cases := []struct {
 		name        string
+		role        string
 		repo_return *database.Project
 		repo_err    error
 		want_return *database.Project
 	}{
-		{"should send the name and project id and stamp updated_at", updated, nil, updated},
-		{"should return the repository error", nil, errors.New("db down"), nil},
+		{"should send the name and project id and stamp updated_at as owner", "owner", updated, nil, updated},
+		{"should send the name and project id and stamp updated_at as editor", "editor", updated, nil, updated},
+		{"should return the repository error", "owner", nil, errors.New("db down"), nil},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			defer project_repository.Clear()
 
+			project_repository.find_one_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
+				ProjectID: test_uuid(test_project_id),
+				Role:      pgtype.Text{String: c.role, Valid: true},
+			}
 			project_repository.update_one_return = c.repo_return
 			project_repository.update_one_err = c.repo_err
 
 			before := time.Now()
-			got_return, got_err := project_service.UpdateOne(input)
+			got_return, got_err := project_service.UpdateOne(test_user_id, test_project_id, "renamed")
 
 			if got_err != c.repo_err {
 				t.Errorf("got error %v, want %v", got_err, c.repo_err)
@@ -508,9 +654,6 @@ func TestProjectServiceUpdateOne(t *testing.T) {
 	}
 }
 
-// @params t: the running test; got: the error returned; want: the expected error, or nil
-// @return none; fails the test on mismatch
-// assert_error compares two errors by message, treating nil as its own value.
 func assert_error(t *testing.T, got error, want error) {
 	t.Helper()
 

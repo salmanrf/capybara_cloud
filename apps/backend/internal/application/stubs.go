@@ -21,11 +21,11 @@ func (s *StubProjectService) Create(user_id string, org_id, project_name string)
 	return s.create_return, s.create_err
 }
 
-func (s *StubProjectService) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*database.Project, error) {
+func (s *StubProjectService) UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error) {
 	return s.update_one_return, s.update_one_err
 }
 
-func (s *StubProjectService) DeleteOne(project_id string) error {
+func (s *StubProjectService) DeleteOne(user_id string, project_id string) error {
 	return s.delete_one_err
 }
 
