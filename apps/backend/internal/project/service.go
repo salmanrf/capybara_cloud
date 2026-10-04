@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +50,18 @@ func (s *service) Create(user_id string, org_id string, project_name  string) (*
 
 	if user == nil {
 		return nil, errors.New("user not found")
+	}
+
+	org, err := s.org_service.FindByIdAndRole(user_id, org_id, []string{})
+	if err != nil || org == nil {
+		return nil, errors.New("invalid_role")
+	}
+	allowed_roles := []string{
+		"owner",
+		"editor",
+	}
+	if !slices.Contains(allowed_roles, org.Role) {
+		return nil, errors.New("invalid_role")
 	}
 
 	org_uuid := pgtype.UUID{}

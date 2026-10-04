@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ func TestProjectServiceCreate(t *testing.T) {
 	t.Run("should return the user lookup error without touching the repository", func(t *testing.T) {
 		defer project_repository.Clear()
 		defer user_service.Clear()
+		defer org_service.Clear()
 
 		user_service.find_by_id_err = errors.New("db down")
 
@@ -48,45 +50,167 @@ func TestProjectServiceCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("should create the project with the user as owner", func(t *testing.T) {
+	t.Run("should return error when org_service.FindByIdAndRole returns error", func (t *testing.T) {
 		defer project_repository.Clear()
 		defer user_service.Clear()
+		defer org_service.Clear()
 
-		user_service.find_by_id_return = &database.User{UserID: test_uuid(test_user_id)}
-		created := &database.Project{ProjectID: test_uuid(test_project_id), Name: "my-project"}
-		project_repository.create_project_with_member_return = created
+		want_error := errors.New("internal error")
+		org_service.find_by_id_and_role_err = want_error
 
-		got_project, err := project_service.Create(test_user_id, test_org_id, "my-project")
-
-		if err != nil {
-			t.Fatalf("got error %v, want nil", err)
-		}
-		if got_project != created {
-			t.Errorf("got project %v, want %v", got_project, created)
+		user_service.find_by_id_return = &database.User{
+			UserID: test_uuid(test_user_id),
 		}
 
-		got_n_calls := project_repository.create_project_with_member_n_calls
-		want_n_calls := 1
-		if got_n_calls != want_n_calls {
-			t.Fatalf("got %d CreateProjectWithMember calls, want %d", got_n_calls, want_n_calls)
+		_, got_err := project_service.Create(
+			test_user_id,
+			test_project_id,
+			"Masbro Cloud",
+		)
+
+		if got_err == nil {
+			t.Fatalf("got error nil, want '%v'", want_error)
 		}
 
-		got_args := project_repository.create_project_with_member_call_args[0]
-		want_project_params := database.CreateProjectParams{OrgID: test_uuid(test_org_id), Name: "my-project"}
-		if got_args.project != want_project_params {
-			t.Errorf("got project params %v, want %v", got_args.project, want_project_params)
+		got_find_org_called := org_service.find_by_id_and_role_n_calls
+		want_find_org_called := 1
+		if got_find_org_called != want_find_org_called {
+			t.Errorf("got org_service.FindByIdAndRole called %d time, want %d", got_find_org_called, want_find_org_called)
+		}
+	})
+
+	t.Run("should return error 'invalid_role' org not found", func (t *testing.T) {
+		defer project_repository.Clear()
+		defer user_service.Clear()
+		defer org_service.Clear()
+
+		org_service.find_by_id_and_role_return = nil
+		org_service.find_by_id_and_role_err = nil
+
+		user_service.find_by_id_return = &database.User{
+			UserID: test_uuid(test_user_id),
 		}
 
-		got_member_user_id := got_args.member.UserID
-		want_member_user_id := test_uuid(test_user_id)
-		if got_member_user_id != want_member_user_id {
-			t.Errorf("got member user id %v, want %v", got_member_user_id, want_member_user_id)
+		_, got_err := project_service.Create(
+			test_user_id,
+			test_project_id,
+			"Masbro Cloud",
+		)
+		want_error := errors.New("invalid_role")
+
+		if got_err == nil {
+			t.Fatalf("got error nil, want '%v'", want_error)
 		}
 
-		got_role := got_args.member.Role
-		want_role := pgtype.Text{String: "owner", Valid: true}
-		if got_role != want_role {
-			t.Errorf("got member role %v, want %v", got_role, want_role)
+		got_find_org_called := org_service.find_by_id_and_role_n_calls
+		want_find_org_called := 1
+		if got_find_org_called != want_find_org_called {
+			t.Errorf("got org_service.FindByIdAndRole called %d time, want %d", got_find_org_called, want_find_org_called)
+		}
+	})
+
+	t.Run("should reject creation with 'invalid_role' when role within org is incorrect", func (t *testing.T) {
+		tests := []struct{
+			role string
+		}{
+			{"viewer"},
+			{"kambing"},
+			{"kucing"},
+		}
+
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("role: '%s'", tt.role), func (t *testing.T) {
+				defer project_repository.Clear()
+				defer user_service.Clear()
+				defer org_service.Clear()
+
+				org_service.find_by_id_and_role_return = 
+					&database.FindOneOrganizationByIdAndRoleRow{
+						Role: tt.role,
+					}
+				org_service.find_by_id_and_role_err = nil
+
+				user_service.find_by_id_return = &database.User{
+					UserID: test_uuid(test_user_id),
+				}
+
+				_, got_err := project_service.Create(
+					test_user_id,
+					test_project_id,
+					"Masbro Cloud",
+				)
+				want_error := errors.New("invalid_role")
+
+				if got_err == nil {
+					t.Fatalf("got error nil, want '%v'", want_error)
+				}
+
+				got_find_org_called := org_service.find_by_id_and_role_n_calls
+				want_find_org_called := 1
+				if got_find_org_called != want_find_org_called {
+					t.Errorf("got org_service.FindByIdAndRole called %d time, want %d", got_find_org_called, want_find_org_called)
+				}
+			})
+		}
+	})
+	
+	t.Run("should create the project with the user as owner", func(t *testing.T) {
+		tests := []struct{
+			user string
+			role string
+		}{
+			{test_user_id, "owner"},
+			{test_user_id, "editor"},
+		}
+
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("user: '%s', role: '%s'", tt.user, tt.role), func(t *testing.T) {
+				defer project_repository.Clear()
+				defer org_service.Clear()
+				defer user_service.Clear()
+
+				user_service.find_by_id_return = &database.User{UserID: test_uuid(test_user_id)}
+				org_service.find_by_id_and_role_return = 
+					&database.FindOneOrganizationByIdAndRoleRow{
+						Role: tt.role,
+					}
+				org_service.find_by_id_and_role_err = nil
+				created := &database.Project{ProjectID: test_uuid(test_project_id), Name: "my-project"}
+				project_repository.create_project_with_member_return = created
+		
+				got_project, err := project_service.Create(test_user_id, test_org_id, "my-project")
+		
+				if err != nil {
+					t.Fatalf("got error %v, want nil", err)
+				}
+				if got_project != created {
+					t.Errorf("got project %v, want %v", got_project, created)
+				}
+		
+				got_n_calls := project_repository.create_project_with_member_n_calls
+				want_n_calls := 1
+				if got_n_calls != want_n_calls {
+					t.Fatalf("got %d CreateProjectWithMember calls, want %d", got_n_calls, want_n_calls)
+				}
+		
+				got_args := project_repository.create_project_with_member_call_args[0]
+				want_project_params := database.CreateProjectParams{OrgID: test_uuid(test_org_id), Name: "my-project"}
+				if got_args.project != want_project_params {
+					t.Errorf("got project params %v, want %v", got_args.project, want_project_params)
+				}
+		
+				got_member_user_id := got_args.member.UserID
+				want_member_user_id := test_uuid(test_user_id)
+				if got_member_user_id != want_member_user_id {
+					t.Errorf("got member user id %v, want %v", got_member_user_id, want_member_user_id)
+				}
+		
+				got_role := got_args.member.Role
+				want_role := pgtype.Text{String: "owner", Valid: true}
+				if got_role != want_role {
+					t.Errorf("got member role %v, want %v", got_role, want_role)
+				}
+			})
 		}
 	})
 
@@ -102,8 +226,12 @@ func TestProjectServiceCreate(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			defer project_repository.Clear()
 			defer user_service.Clear()
+			defer org_service.Clear()
 
 			user_service.find_by_id_return = &database.User{UserID: test_uuid(test_user_id)}
+			org_service.find_by_id_and_role_return = &database.FindOneOrganizationByIdAndRoleRow{
+				Role: "owner",
+			}
 			project_repository.create_project_with_member_err = c.repo_err
 
 			got_project, err := project_service.Create(test_user_id, test_org_id, "my-project")
@@ -121,9 +249,6 @@ func TestProjectServiceCreate(t *testing.T) {
 	}
 }
 
-// @params id: a UUID string
-// @return the parsed pgtype.UUID
-// test_uuid parses a UUID literal for use in expected values.
 func test_uuid(id string) pgtype.UUID {
 	uuid := pgtype.UUID{}
 	uuid.Scan(id)
