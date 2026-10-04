@@ -95,13 +95,14 @@ func main() {
 	queries := database.New(db_conn)
 	application_repository := application.NewRepository(ctx, queries)
 	deployment_repository := deployment.NewDeploymentRepository(ctx, queries)
+	project_repository := project.NewRepository(ctx, db_conn, queries)
 	deploy_in_chan := make(chan deployment.DeployRequest)
 	deploy_out_chan := make(chan deployment.DeployStepResult)
 	
 	user_service := user.NewService(ctx, logger, queries)
 	auth_service := auth.NewService(ctx, logger, user_service)
 	org_service := organization.NewService(ctx, logger, db_conn, queries, user_service)
-	project_service := project.NewService(ctx, logger, db_conn, queries, user_service)
+	project_service := project.NewService(ctx, logger, project_repository, user_service, org_service)
 	application_service := application.NewService(ctx, logger, application_repository, project_service)
 	port_allocator_service := shared_deployment.NewPortAllocatorService()
 	docker_service, err := docker.New(
