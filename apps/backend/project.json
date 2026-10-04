@@ -1,0 +1,82 @@
+{
+  "name": "backend",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/backend",
+  "implicitDependencies": [
+    "shared-go"
+  ],
+  "targets": {
+    "supabase-start": {
+      "command": "supabase start",
+      "options": {
+        "cwd": "apps/backend"
+      }
+    },
+    "supabase-reset": {
+      "command": "supabase db reset",
+      "options": {
+        "cwd": "apps/backend"
+      }
+    },
+    "sqlc": {
+      "command": "sqlc generate",
+      "options": {
+        "cwd": "apps/backend"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/sqlc.yaml",
+        "{projectRoot}/sql/**/*",
+        "{projectRoot}/supabase/migrations/**/*"
+      ],
+      "outputs": [
+        "{workspaceRoot}/packages/shared-go/database"
+      ]
+    },
+    "build": {
+      "command": "make dev",
+      "options": {
+        "cwd": "apps/backend"
+      },
+      "configurations": {
+        "production": {
+          "command": "make prod"
+        }
+      },
+      "dependsOn": [
+        "sqlc"
+      ]
+    },
+    "dev": {
+      "command": "./run.sh dev",
+      "options": {
+        "cwd": "apps/backend"
+      },
+      "dependsOn": [
+        "sqlc",
+        "supabase-start"
+      ],
+      "continuous": true
+    },
+    "serve": {
+      "command": "./run.sh prod",
+      "options": {
+        "cwd": "apps/backend"
+      },
+      "dependsOn": [
+        "sqlc"
+      ],
+      "continuous": true
+    },
+    "test": {
+      "command": "go test ./...",
+      "options": {
+        "cwd": "apps/backend"
+      },
+      "dependsOn": [
+        "sqlc"
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 .env*
 packages/shared-go/database
-.nx/installation
+node_modules
 .nx/cache
 .nx/workspace-data
 .nx/self-healing
