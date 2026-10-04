@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* Masbro Dashboard v2 palette and fonts. The accent is the one token to change to re-theme. */
+@theme {
+  --color-accent: #5fb8a5;
+  --color-on-accent: #181104;
+
+  --color-canvas: #131110;
+  --color-surface: #1a1715;
+  --color-surface-hover: #1c1917;
+  --color-surface-raised: #221e1b;
+  --color-surface-strong: #242019;
+  --color-avatar: #2e2925;
+
+  --color-line-muted: #262220;
+  --color-line: #2b2724;
+  --color-line-kbd: #322d29;
+  --color-line-dashed: #35302b;
+  --color-line-strong: #3b3630;
+  --color-faint: #4a443f;
+
+  --color-fg: #ede8e3;
+  --color-fg-secondary: #c9c2ba;
+  --color-fg-muted: #9c948a;
+  --color-fg-subtle: #7a736b;
+
+  --color-status-running: #4ec97f;
+  --color-status-building: #d9a13b;
+  --color-status-failed: #e5604f;
+
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .page {
+    max-width: 28rem;
+    margin: 4rem auto;
+    padding: 0 1rem;
+  }
+
+  .form {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .form label {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .error {
+    color: #c62828;
+  }
+}
