@@ -2,6 +2,7 @@
   "name": "capybara-cloud",
   "private": true,
   "scripts": {
+    "dev:fe-be": "nx run-many -t dev frontend backend",
     "postinstall": "go -C apps/backend mod download && go -C packages/shared-go mod download"
   },
   "devDependencies": {

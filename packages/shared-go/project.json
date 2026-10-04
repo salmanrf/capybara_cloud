@@ -1,0 +1,13 @@
+{
+  "name": "shared-go",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "packages/shared-go",
+  "targets": {
+    "test": {
+      "command": "go test ./...",
+      "options": { "cwd": "packages/shared-go" },
+      "dependsOn": ["backend:sqlc"]
+    }
+  }
+}
