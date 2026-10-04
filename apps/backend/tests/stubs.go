@@ -176,6 +176,11 @@ type StubApplicationService struct {
 	Find_one_config_n_calls int
 	Find_one_config_return *dto.ApplicationConfigResponse
 	Find_one_config_error error
+	List_by_project_n_calls int
+	List_by_project_calls_arg1 []string
+	List_by_project_calls_arg2 []string
+	List_by_project_return []dto.ApplicationListEntry
+	List_by_project_err error
 }
 
 func (s *StubApplicationService) Clear() {
@@ -205,6 +210,11 @@ func (s *StubApplicationService) Clear() {
 	s.Find_one_config_calls_arg2 = []string{}
 	s.Find_one_config_return = nil
 	s.Find_one_config_error = nil
+	s.List_by_project_n_calls = 0
+	s.List_by_project_calls_arg1 = []string{}
+	s.List_by_project_calls_arg2 = []string{}
+	s.List_by_project_return = nil
+	s.List_by_project_err = nil
 }
 
 func (s *StubApplicationService) Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error) {
@@ -241,6 +251,13 @@ func (s *StubApplicationService) FindOneConfig(app_id string, user_id string) (*
 	s.Find_one_config_calls_arg1 = append(s.Find_one_config_calls_arg1, app_id)
 	s.Find_one_config_calls_arg2 = append(s.Find_one_config_calls_arg2, user_id)
 	return s.Find_one_config_return, s.Find_one_config_error
+}
+
+func (s *StubApplicationService) ListByProject(user_id string, project_id string) ([]dto.ApplicationListEntry, error) {
+	s.List_by_project_n_calls += 1
+	s.List_by_project_calls_arg1 = append(s.List_by_project_calls_arg1, user_id)
+	s.List_by_project_calls_arg2 = append(s.List_by_project_calls_arg2, project_id)
+	return s.List_by_project_return, s.List_by_project_err
 }
 
 type StubDeploymentService struct {

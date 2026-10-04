@@ -5,12 +5,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pkgerr "github.com/pkg/errors"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 )
 
-// @params none
-// @return none
-// repository is the sqlc-backed ProjectRepository; conn is used only to open transactions for the atomic methods.
 type repository struct {
 	ctx     context.Context
 	conn    *pgxpool.Pool
@@ -37,7 +35,7 @@ func NewRepository(ctx context.Context, conn *pgxpool.Pool, queries *database.Qu
 func (r *repository) CreateProjectWithMember(project database.CreateProjectParams, member database.CreateProjectMemberParams) (*database.Project, error) {
 	trx, err := r.conn.Begin(r.ctx)
 	if err != nil {
-		return nil, err
+		return nil, pkgerr.WithStack(err)
 	}
 	defer trx.Rollback(r.ctx)
 
@@ -45,19 +43,19 @@ func (r *repository) CreateProjectWithMember(project database.CreateProjectParam
 
 	created, err := q.CreateProject(r.ctx, project)
 	if err != nil {
-		return nil, err
+		return nil, pkgerr.WithStack(err)
 	}
 
 	member.ProjectID = created.ProjectID
 
 	_, err = q.CreateProjectMember(r.ctx, member)
 	if err != nil {
-		return nil, err
+		return nil, pkgerr.WithStack(err)
 	}
 
 	err = trx.Commit(r.ctx)
 	if err != nil {
-		return nil, err
+		return nil, pkgerr.WithStack(err)
 	}
 
 	return &created, nil
@@ -66,7 +64,7 @@ func (r *repository) CreateProjectWithMember(project database.CreateProjectParam
 func (r *repository) DeleteProjectWithMembers(project_id pgtype.UUID) error {
 	trx, err := r.conn.Begin(r.ctx)
 	if err != nil {
-		return err
+		return pkgerr.WithStack(err)
 	}
 	defer trx.Rollback(r.ctx)
 
@@ -74,35 +72,37 @@ func (r *repository) DeleteProjectWithMembers(project_id pgtype.UUID) error {
 
 	err = q.DeleteProjectMembersByProjectId(r.ctx, project_id)
 	if err != nil {
-		return err
+		return pkgerr.WithStack(err)
 	}
 
 	err = q.DeleteOneProject(r.ctx, project_id)
 	if err != nil {
-		return err
+		return pkgerr.WithStack(err)
 	}
 
-	return trx.Commit(r.ctx)
+	return pkgerr.WithStack(trx.Commit(r.ctx))
 }
 
 func (r *repository) FindOneById(params database.FindOneProjectByIdParams) (*database.FindOneProjectByIdRow, error) {
 	project, err := r.queries.FindOneProjectById(r.ctx, params)
 
-	return &project, err
+	return &project, pkgerr.WithStack(err)
 }
 
 func (r *repository) FindOneByIdAndRole(params database.FindOneProjectByIdAndRoleParams) (*database.FindOneProjectByIdAndRoleRow, error) {
 	project, err := r.queries.FindOneProjectByIdAndRole(r.ctx, params)
 
-	return &project, err
+	return &project, pkgerr.WithStack(err)
 }
 
 func (r *repository) FindForUser(params database.FindProjectsForUserParams) ([]database.FindProjectsForUserRow, error) {
-	return r.queries.FindProjectsForUser(r.ctx, params)
+	rows, err := r.queries.FindProjectsForUser(r.ctx, params)
+
+	return rows, pkgerr.WithStack(err)
 }
 
 func (r *repository) UpdateOne(params database.UpdateOneProjectParams) (*database.Project, error) {
 	project, err := r.queries.UpdateOneProject(r.ctx, params)
 
-	return &project, err
+	return &project, pkgerr.WithStack(err)
 }

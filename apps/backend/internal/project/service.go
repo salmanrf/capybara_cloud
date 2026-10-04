@@ -2,16 +2,17 @@ package project
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	pkgerr "github.com/pkg/errors"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/organization"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/user"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
+	errutils "github.com/salmanrf/capybara-cloud/packages/shared-go/errors"
 )
 
 type Service interface {
@@ -49,19 +50,22 @@ func (s *service) Create(user_id string, org_id string, project_name  string) (*
 	}
 
 	if user == nil {
-		return nil, errors.New("user not found")
+		return nil, pkgerr.New("user not found")
 	}
 
 	org, err := s.org_service.FindByIdAndRole(user_id, org_id, []string{})
-	if err != nil || org == nil {
-		return nil, errors.New("invalid_role")
+	if err != nil {
+		return nil, errutils.Mask(err, "invalid_role")
+	}
+	if org == nil {
+		return nil, pkgerr.New("invalid_role")
 	}
 	allowed_roles := []string{
 		"owner",
 		"editor",
 	}
 	if !slices.Contains(allowed_roles, org.Role) {
-		return nil, errors.New("invalid_role")
+		return nil, pkgerr.New("invalid_role")
 	}
 
 	org_uuid := pgtype.UUID{}
@@ -81,8 +85,11 @@ func (s *service) Create(user_id string, org_id string, project_name  string) (*
 
 func (s *service) UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error) {
 	existing, err := s.FindByIdAndRole(user_id, project_id, []string{})
-	if err != nil || existing == nil {
-		return nil, errors.New("invalid_role")
+	if err != nil {
+		return nil, errutils.Mask(err, "invalid_role")
+	}
+	if existing == nil {
+		return nil, pkgerr.New("invalid_role")
 	}
 
 	allowed_roles := []string{
@@ -90,7 +97,7 @@ func (s *service) UpdateOne(user_id string, project_id string, project_name stri
 		"editor",
 	}
 	if !slices.Contains(allowed_roles, existing.Role.String) {
-		return nil, errors.New("invalid_role")
+		return nil, pkgerr.New("invalid_role")
 	}
 
 	updated_at := pgtype.Timestamp{
@@ -113,8 +120,11 @@ func (s *service) UpdateOne(user_id string, project_id string, project_name stri
 
 func (s *service) DeleteOne(user_id string, project_id string) error {
 	existing, err := s.FindByIdAndRole(user_id, project_id, []string{})
-	if err != nil || existing == nil {
-		return errors.New("invalid_role")
+	if err != nil {
+		return errutils.Mask(err, "invalid_role")
+	}
+	if existing == nil {
+		return pkgerr.New("invalid_role")
 	}
 
 	allowed_roles := []string{
@@ -122,7 +132,7 @@ func (s *service) DeleteOne(user_id string, project_id string) error {
 		"editor",
 	}
 	if !slices.Contains(allowed_roles, existing.Role.String) {
-		return errors.New("invalid_role")
+		return pkgerr.New("invalid_role")
 	}
 
 	return s.repository.DeleteProjectWithMembers(existing.ProjectID)
@@ -143,7 +153,7 @@ func (s *service) FindById(user_id string, project_id string) (*database.FindOne
 			if strings.Contains(err.Error(), "no rows") {
 				return nil, nil
 			} else {
-				return nil, errors.New("unable to find project")
+				return nil, errutils.Mask(err, "unable to find project")
 			}
 	}
 
@@ -165,7 +175,7 @@ func (s *service) FindByIdAndRole(user_id string, project_id string, roles []str
 		if strings.Contains(err.Error(), "no rows") {
 			return nil, nil
 		} else {
-			return nil, errors.New("unable to find user")
+			return nil, errutils.Mask(err, "unable to find user")
 		}
 	}
 
@@ -190,7 +200,7 @@ func (s *service) ListMyProjects(user_id string, org_id string) ([]database.Find
 		if strings.Contains(errmsg, "no rows") {
 			return []database.FindProjectsForUserRow{}, nil
 		}
-		return nil, errors.New("unable to find project users, db query failed")
+		return nil, errutils.Mask(err, "unable to find project users, db query failed")
 	}
 
 	return projectus, nil

@@ -23,6 +23,11 @@ func SetupApplicationRouter(logger *slog.Logger, application_service application
 		http.HandlerFunc(app_handlers.HandleCreate),
 	))
 
+	r.Get("/", middleware.LoginGuard(
+		jwt_validator,
+		http.HandlerFunc(app_handlers.HandleListByProject),
+	))
+
 	r.Get("/{app_id}", middleware.LoginGuard(
 		jwt_validator,
 		http.HandlerFunc(app_handlers.HandleFindOne),
