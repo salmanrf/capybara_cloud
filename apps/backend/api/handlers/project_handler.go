@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
@@ -131,7 +132,16 @@ func (h *project_handler) HandleListMyProjects(w http.ResponseWriter, r *http.Re
 	rctx := r.Context()
 	user_id := rctx.Value("user_id").(string)
 
-	projectuses, err := h.project_service.ListMyProjects(user_id)
+	org_id := r.URL.Query().Get("org_id")
+	if org_id != "" {
+		org_uuid := pgtype.UUID{}
+		if err := org_uuid.Scan(org_id); err != nil {
+			utils.ResponseWithError(w, http.StatusBadRequest, nil, "invalid org_id format, must be a valid uuid string")
+			return
+		}
+	}
+
+	projectuses, err := h.project_service.ListMyProjects(user_id, org_id)
 	if err != nil {
 		h.logger.Error("[HandleListMyProjects] Unable to list projects", "error", pkgerr.WithStack(err), "user_id", user_id)
 		utils.ResponseWithError(

@@ -20,7 +20,7 @@ type Service interface {
 	DeleteOne(user_id string, project_id string) error
 	FindById(user_id string, project_id string) (*database.FindOneProjectByIdRow, error)
 	FindByIdAndRole(user_id string, project_id string, roles []string) (*database.FindOneProjectByIdAndRoleRow, error)
-	ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error)
+	ListMyProjects(user_id string, org_id string) ([]database.FindProjectsForUserRow, error)
 }
 
 type service struct {
@@ -172,11 +172,19 @@ func (s *service) FindByIdAndRole(user_id string, project_id string, roles []str
 	return project_res, nil
 }
 
-func (s *service) ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error) {
+func (s *service) ListMyProjects(user_id string, org_id string) ([]database.FindProjectsForUserRow, error) {
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	projectus, err := s.repository.FindForUser(user_uuid)
+	org_uuid := pgtype.UUID{}
+	if org_id != "" {
+		org_uuid.Scan(org_id)
+	}
+
+	projectus, err := s.repository.FindForUser(database.FindProjectsForUserParams{
+		UserID: user_uuid,
+		OrgID:  org_uuid,
+	})
 	if err != nil {
 		errmsg := err.Error()
 		if strings.Contains(errmsg, "no rows") {

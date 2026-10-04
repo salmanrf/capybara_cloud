@@ -487,7 +487,7 @@ func TestProjectServiceListMyProjects(t *testing.T) {
 			project_repository.find_for_user_return = c.repo_return
 			project_repository.find_for_user_err = c.repo_err
 
-			got_return, got_err := project_service.ListMyProjects(test_user_id)
+			got_return, got_err := project_service.ListMyProjects(test_user_id, "")
 
 			assert_error(t, got_err, c.want_err)
 
@@ -515,8 +515,43 @@ func TestProjectServiceListMyProjects(t *testing.T) {
 			if len(got_args) != 1 {
 				t.Fatalf("got %d FindForUser calls, want 1", len(got_args))
 			}
-			if got_args[0] != want_user_id {
-				t.Errorf("got user id %v, want %v", got_args[0], want_user_id)
+			if got_args[0].UserID != want_user_id {
+				t.Errorf("got user id %v, want %v", got_args[0].UserID, want_user_id)
+			}
+		})
+	}
+}
+
+func TestProjectServiceListMyProjectsOrgFilter(t *testing.T) {
+	ctx := context.Background()
+	project_repository := &StubProjectRepository{}
+	project_service := NewService(ctx, slog.Default(), project_repository, &StubUserService{}, &StubOrgService{})
+
+	cases := []struct {
+		name        string
+		org_id      string
+		want_org_id pgtype.UUID
+	}{
+		{"should not filter by organization when org_id is empty", "", pgtype.UUID{}},
+		{"should filter by organization when org_id is given", test_org_id, test_uuid(test_org_id)},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			defer project_repository.Clear()
+
+			project_service.ListMyProjects(test_user_id, c.org_id)
+
+			got_args := project_repository.find_for_user_call_args
+			want_args := database.FindProjectsForUserParams{
+				UserID: test_uuid(test_user_id),
+				OrgID:  c.want_org_id,
+			}
+			if len(got_args) != 1 {
+				t.Fatalf("got %d FindForUser calls, want 1", len(got_args))
+			}
+			if got_args[0] != want_args {
+				t.Errorf("got params %v, want %v", got_args[0], want_args)
 			}
 		})
 	}

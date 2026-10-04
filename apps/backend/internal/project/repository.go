@@ -22,7 +22,7 @@ type ProjectRepository interface {
 	DeleteProjectWithMembers(project_id pgtype.UUID) error
 	FindOneById(params database.FindOneProjectByIdParams) (*database.FindOneProjectByIdRow, error)
 	FindOneByIdAndRole(params database.FindOneProjectByIdAndRoleParams) (*database.FindOneProjectByIdAndRoleRow, error)
-	FindForUser(user_id pgtype.UUID) ([]database.FindProjectsForUserRow, error)
+	FindForUser(params database.FindProjectsForUserParams) ([]database.FindProjectsForUserRow, error)
 	UpdateOne(params database.UpdateOneProjectParams) (*database.Project, error)
 }
 
@@ -97,8 +97,8 @@ func (r *repository) FindOneByIdAndRole(params database.FindOneProjectByIdAndRol
 	return &project, err
 }
 
-func (r *repository) FindForUser(user_id pgtype.UUID) ([]database.FindProjectsForUserRow, error) {
-	return r.queries.FindProjectsForUser(r.ctx, user_id)
+func (r *repository) FindForUser(params database.FindProjectsForUserParams) ([]database.FindProjectsForUserRow, error) {
+	return r.queries.FindProjectsForUser(r.ctx, params)
 }
 
 func (r *repository) UpdateOne(params database.UpdateOneProjectParams) (*database.Project, error) {

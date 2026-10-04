@@ -284,7 +284,7 @@ func TestProjectGetOne(t *testing.T) {
 		HttpOnly: true,
 		Secure: os.Getenv("STAGE") != "local",
 	}
-	
+
 	project_service.find_by_id_return = &database.FindOneProjectByIdRow{
 		Name: pgtype.Text{String: "Capybara"},
 	}
@@ -620,6 +620,215 @@ func TestProjectDeleteOne(t *testing.T) {
 		want_delete_one_n_calls := 0
 		if got_delete_one_n_calls != want_delete_one_n_calls {
 			t.Errorf("got delete one called %d times, want %d", got_delete_one_n_calls, want_delete_one_n_calls)
+		}
+	})
+}
+
+func TestProjectListMine(t *testing.T) {
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
+
+	user_service := &StubUserService{}
+	auth_service := &StubAuthService{}
+	org_service := &StubOrgService{}
+	project_service := &StubProjectService{}
+	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
+	jwt_validator := &StubJwtValidator{}
+
+	mock_user_id := "3ad11d5d-5a7e-433d-ac51-fba7a645f3d4"
+	jwt_validator.validate_return = mock_user_id
+
+	server := api.NewAPIServer(
+		logger,
+		application_service,
+		deployment_service,
+		user_service,
+		auth_service,
+		org_service,
+		project_service,
+		jwt_validator,
+	)
+
+	sid_cookie := &http.Cookie{
+		Name: "sid",
+		Value: "123",
+		Path: "/",
+		SameSite: http.SameSiteStrictMode,
+		MaxAge: 3600 * 24,
+		HttpOnly: true,
+		Secure: os.Getenv("STAGE") != "local",
+	}
+
+	mock_org_id := "64c5e7da-3e02-4db8-aa2a-aa5161c085f7"
+
+	t.Run("it should pass the org_id filter to the project service", func (t *testing.T) {
+		defer project_service.Clear()
+
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects?org_id=%s", mock_org_id), nil)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusOK
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
+		}
+
+		got_n_calls := project_service.list_my_projects_n_calls
+		want_n_calls := 1
+		if got_n_calls != want_n_calls {
+			t.Fatalf("got list my projects called %d times, want %d", got_n_calls, want_n_calls)
+		}
+
+		got_args := project_service.list_my_projects_call_args[0]
+		want_args := []string{mock_user_id, mock_org_id}
+		if !slices.Equal(got_args, want_args) {
+			t.Errorf("got args %v, want %v", got_args, want_args)
+		}
+	})
+
+	t.Run("it should return status 400 when org_id is not a uuid", func (t *testing.T) {
+		defer project_service.Clear()
+
+		req, _ := http.NewRequest(http.MethodGet, "/api/projects?org_id=not-a-uuid", nil)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusBadRequest
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
+		}
+
+		got_n_calls := project_service.list_my_projects_n_calls
+		want_n_calls := 0
+		if got_n_calls != want_n_calls {
+			t.Errorf("got list my projects called %d times, want %d", got_n_calls, want_n_calls)
+		}
+	})
+
+	t.Run("it should return status 401 without the sid cookie", func (t *testing.T) {
+		defer project_service.Clear()
+
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects?org_id=%s", mock_org_id), nil)
+		res := httptest.NewRecorder()
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusUnauthorized
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
+		}
+
+		got_n_calls := project_service.list_my_projects_n_calls
+		want_n_calls := 0
+		if got_n_calls != want_n_calls {
+			t.Errorf("got list my projects called %d times, want %d", got_n_calls, want_n_calls)
+		}
+	})
+
+	t.Run("it should list every project when org_id is not given", func (t *testing.T) {
+		defer project_service.Clear()
+
+		mock_project_uuid := pgtype.UUID{}
+		mock_project_uuid.Scan("28451bd5-0113-4ec6-9540-6646ae72a957")
+		project_service.list_my_projects_return = []database.FindProjectsForUserRow{
+			{ProjectID: mock_project_uuid, Role: pgtype.Text{String: "owner", Valid: true}},
+		}
+
+		req, _ := http.NewRequest(http.MethodGet, "/api/projects", nil)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusOK
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
+		}
+
+		got_args := project_service.list_my_projects_call_args
+		want_args := []string{mock_user_id, ""}
+		if len(got_args) != 1 {
+			t.Fatalf("got list my projects called %d times, want 1", len(got_args))
+		}
+		if !slices.Equal(got_args[0], want_args) {
+			t.Errorf("got args %v, want %v", got_args[0], want_args)
+		}
+
+		var got_body map[string]interface{}
+		if err := json.NewDecoder(res.Body).Decode(&got_body); err != nil {
+			t.Fatalf("got error %s, want nil", err.Error())
+		}
+
+		got_data := got_body["data"].([]interface{})
+		if len(got_data) != 1 {
+			t.Fatalf("got %d projects, want 1", len(got_data))
+		}
+
+		got_project_id := got_data[0].(map[string]interface{})["project"].(map[string]interface{})["project_id"]
+		want_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		if got_project_id != want_project_id {
+			t.Errorf("got project_id %v, want %s", got_project_id, want_project_id)
+		}
+	})
+
+	t.Run("it should return an empty list when the user has no projects in the org", func (t *testing.T) {
+		defer project_service.Clear()
+
+		project_service.list_my_projects_return = []database.FindProjectsForUserRow{}
+
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects?org_id=%s", mock_org_id), nil)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusOK
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
+		}
+
+		var got_body map[string]json.RawMessage
+		if err := json.NewDecoder(res.Body).Decode(&got_body); err != nil {
+			t.Fatalf("got error %s, want nil", err.Error())
+		}
+
+		got_data := string(got_body["data"])
+		want_data := "[]"
+		if got_data != want_data {
+			t.Errorf("got data %s, want %s", got_data, want_data)
+		}
+	})
+
+	t.Run("it should return status 500 when the project service fails", func (t *testing.T) {
+		defer project_service.Clear()
+
+		project_service.list_my_projects_err = errors.New("unable to find project users, db query failed")
+
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects?org_id=%s", mock_org_id), nil)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusInternalServerError
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
 	})
 }

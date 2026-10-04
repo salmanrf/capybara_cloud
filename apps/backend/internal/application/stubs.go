@@ -37,7 +37,7 @@ func (s *StubProjectService) FindByIdAndRole(user_id string, project_id string, 
 	return s.find_by_id_and_role_return, s.find_by_id_and_role_error
 }
 
-func (s *StubProjectService) ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error) {
+func (s *StubProjectService) ListMyProjects(user_id string, org_id string) ([]database.FindProjectsForUserRow, error) {
 	return []database.FindProjectsForUserRow{}, nil
 }
 

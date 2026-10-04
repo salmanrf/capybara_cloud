@@ -17,7 +17,9 @@ FROM "project_members" AS project_members
 LEFT JOIN 
   "projects" AS project ON "project_members".project_id = "project".project_id
 WHERE
-  "project_members".user_id = $1;
+  "project_members".user_id = sqlc.arg('user_id')
+  AND (sqlc.narg('org_id')::uuid IS NULL OR "project".org_id = sqlc.narg('org_id'))
+ORDER BY "project".name;
 
 -- name: FindOneProjectById :one
 SELECT "project".*

@@ -34,7 +34,7 @@ type StubProjectRepository struct {
 	find_for_user_return    []database.FindProjectsForUserRow
 	find_for_user_err       error
 	find_for_user_n_calls   int
-	find_for_user_call_args []pgtype.UUID
+	find_for_user_call_args []database.FindProjectsForUserParams
 
 	update_one_return    *database.Project
 	update_one_err       error
@@ -70,9 +70,9 @@ func (s *StubProjectRepository) FindOneByIdAndRole(params database.FindOneProjec
 	return s.find_one_by_id_and_role_return, s.find_one_by_id_and_role_err
 }
 
-func (s *StubProjectRepository) FindForUser(user_id pgtype.UUID) ([]database.FindProjectsForUserRow, error) {
+func (s *StubProjectRepository) FindForUser(params database.FindProjectsForUserParams) ([]database.FindProjectsForUserRow, error) {
 	s.find_for_user_n_calls += 1
-	s.find_for_user_call_args = append(s.find_for_user_call_args, user_id)
+	s.find_for_user_call_args = append(s.find_for_user_call_args, params)
 	return s.find_for_user_return, s.find_for_user_err
 }
 

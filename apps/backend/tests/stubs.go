@@ -102,6 +102,10 @@ type StubProjectService struct {
 	delete_one_n_calls int
 	delete_one_call_args [][]string
 	delete_one_err error
+	list_my_projects_return []database.FindProjectsForUserRow
+	list_my_projects_err error
+	list_my_projects_n_calls int
+	list_my_projects_call_args [][]string
 } 
 
 func (s *StubProjectService) Clear() {
@@ -138,8 +142,11 @@ func (s *StubProjectService) FindByIdAndRole(user_id string, org_id string, role
 	return s.find_by_id_and_role_return, s.find_by_id_and_role_error
 }
 
-func (s *StubProjectService) ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error) {
-	return []database.FindProjectsForUserRow{}, nil
+func (s *StubProjectService) ListMyProjects(user_id string, org_id string) ([]database.FindProjectsForUserRow, error) {
+	s.list_my_projects_n_calls += 1
+	s.list_my_projects_call_args = append(s.list_my_projects_call_args, []string{user_id, org_id})
+
+	return s.list_my_projects_return, s.list_my_projects_err
 }
 
 type StubApplicationService struct {
