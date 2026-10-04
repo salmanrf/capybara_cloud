@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 
+	pkgerr "github.com/pkg/errors"
+
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
 )
 
@@ -16,6 +18,7 @@ type ApplicationRepository interface {
 	UpsertConfig(database.CreateApplicationConfigParams) (*database.ApplicationConfig, error)
 	CreateApplication(database.CreateApplicationParams) (*database.Application, error)
 	UpdateOneApplication(database.UpdateOneApplicationParams) (*database.Application, error)
+	ListByProject(database.ListApplicationsByProjectParams) ([]database.ListApplicationsByProjectRow, error)
 }
 
 func NewRepository(ctx context.Context, queries *database.Queries) ApplicationRepository {
@@ -31,7 +34,7 @@ func (r *repository) FindOneComplete(params database.FindOneApplicationCompleteP
 		params,
 	)
 
-	return &app_with_pm, err
+	return &app_with_pm, pkgerr.WithStack(err)
 }
 
 func (r *repository) UpsertConfig(params database.CreateApplicationConfigParams) (*database.ApplicationConfig, error) {
@@ -40,7 +43,7 @@ func (r *repository) UpsertConfig(params database.CreateApplicationConfigParams)
 		params,
 	)
 
-	return &app_cfg, err
+	return &app_cfg, pkgerr.WithStack(err)
 }
 
 func (r *repository) CreateApplication(params database.CreateApplicationParams) (*database.Application, error) {
@@ -49,7 +52,7 @@ func (r *repository) CreateApplication(params database.CreateApplicationParams) 
 		params,
 	)
 
-	return &app, err
+	return &app, pkgerr.WithStack(err)
 }
 
 func (r *repository) UpdateOneApplication(params database.UpdateOneApplicationParams) (*database.Application, error) {
@@ -58,5 +61,14 @@ func (r *repository) UpdateOneApplication(params database.UpdateOneApplicationPa
 		params,
 	)
 
-	return &app, err
+	return &app, pkgerr.WithStack(err)
+}
+
+func (r *repository) ListByProject(params database.ListApplicationsByProjectParams) ([]database.ListApplicationsByProjectRow, error) {
+	rows, err := r.queries.ListApplicationsByProject(
+		r.ctx,
+		params,
+	)
+
+	return rows, pkgerr.WithStack(err)
 }

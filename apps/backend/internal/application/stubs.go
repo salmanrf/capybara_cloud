@@ -21,11 +21,11 @@ func (s *StubProjectService) Create(user_id string, org_id, project_name string)
 	return s.create_return, s.create_err
 }
 
-func (s *StubProjectService) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*database.Project, error) {
+func (s *StubProjectService) UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error) {
 	return s.update_one_return, s.update_one_err
 }
 
-func (s *StubProjectService) DeleteOne(project_id string) error {
+func (s *StubProjectService) DeleteOne(user_id string, project_id string) error {
 	return s.delete_one_err
 }
 
@@ -37,7 +37,7 @@ func (s *StubProjectService) FindByIdAndRole(user_id string, project_id string, 
 	return s.find_by_id_and_role_return, s.find_by_id_and_role_error
 }
 
-func (s *StubProjectService) ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error) {
+func (s *StubProjectService) ListMyProjects(user_id string, org_id string) ([]database.FindProjectsForUserRow, error) {
 	return []database.FindProjectsForUserRow{}, nil
 }
 
@@ -58,6 +58,10 @@ type StubApplicationRepository struct {
 	create_application_call_args []database.CreateApplicationParams
 	update_one_application_n_calls int
 	update_one_application_call_args []database.UpdateOneApplicationParams
+	list_by_project_return []database.ListApplicationsByProjectRow
+	list_by_project_error error
+	list_by_project_n_calls int
+	list_by_project_call_args []database.ListApplicationsByProjectParams
 }
 
 func (s *StubApplicationRepository) Clear() {
@@ -77,6 +81,10 @@ func (s *StubApplicationRepository) Clear() {
 	s.create_application_call_args = nil
 	s.update_one_application_n_calls = 0
 	s.update_one_application_call_args = nil
+	s.list_by_project_return = nil
+	s.list_by_project_error = nil
+	s.list_by_project_n_calls = 0
+	s.list_by_project_call_args = nil
 }
 
 func (s *StubApplicationRepository) FindOneComplete(params database.FindOneApplicationCompleteParams) (*database.FindOneApplicationCompleteRow, error) {
@@ -103,6 +111,12 @@ func (s *StubApplicationRepository) UpdateOneApplication(params database.UpdateO
 	return s.update_one_application_return, s.update_one_application_error
 }
 
+func (s *StubApplicationRepository) ListByProject(params database.ListApplicationsByProjectParams) ([]database.ListApplicationsByProjectRow, error) {
+	s.list_by_project_n_calls += 1
+	s.list_by_project_call_args = append(s.list_by_project_call_args, params)
+	return s.list_by_project_return, s.list_by_project_error
+}
+
 type StubApplicationService struct {
 	Find_one_return *database.FindOneApplicationCompleteRow
 	Find_one_error  error
@@ -124,6 +138,10 @@ type StubApplicationService struct {
 	find_one_config_return *dto.ApplicationConfigResponse
 	find_one_config_error  error
 	find_one_config_n_calls int
+
+	list_by_project_return []dto.ApplicationListEntry
+	list_by_project_error  error
+	list_by_project_n_calls int
 }
 
 type FindOneCallArgs struct {
@@ -178,4 +196,9 @@ func (s *StubApplicationService) CreateConfig(app_id string, user_id string, cre
 func (s *StubApplicationService) FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error) {
 	s.find_one_config_n_calls += 1
 	return s.find_one_config_return, s.find_one_config_error
+}
+
+func (s *StubApplicationService) ListByProject(user_id string, project_id string) ([]dto.ApplicationListEntry, error) {
+	s.list_by_project_n_calls += 1
+	return s.list_by_project_return, s.list_by_project_error
 }

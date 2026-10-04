@@ -96,12 +96,21 @@ type StubProjectService struct {
 	find_by_id_error error
 	find_by_id_and_role_return *database.FindOneProjectByIdAndRoleRow
 	find_by_id_and_role_error error
+	find_by_id_and_role_n_calls int
 	update_one_n_calls int
-	update_one_call_args []*database.FindOneProjectByIdAndRoleRow 
+	update_one_call_args [][]string
 	delete_one_n_calls int
-	delete_one_call_args []string
+	delete_one_call_args [][]string
 	delete_one_err error
+	list_my_projects_return []database.FindProjectsForUserRow
+	list_my_projects_err error
+	list_my_projects_n_calls int
+	list_my_projects_call_args [][]string
 } 
+
+func (s *StubProjectService) Clear() {
+	*s = StubProjectService{}
+}
 
 func (s *StubProjectService) Create(user_id string, org_id, project_name string) (*database.Project, error) {
 	s.create_n_calls += 1
@@ -110,16 +119,16 @@ func (s *StubProjectService) Create(user_id string, org_id, project_name string)
 	return s.create_return, s.create_err
 }
 
-func (s *StubProjectService) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*database.Project, error) {
+func (s *StubProjectService) UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error) {
 	s.update_one_n_calls += 1
-	s.update_one_call_args = append(s.update_one_call_args, dto) 
+	s.update_one_call_args = append(s.update_one_call_args, []string{user_id, project_id, project_name})
 	
 	return s.update_one_return, s.update_one_err
 }
 
-func (s *StubProjectService) DeleteOne(org_id string) error {
+func (s *StubProjectService) DeleteOne(user_id string, project_id string) error {
 	s.delete_one_n_calls += 1
-	s.delete_one_call_args = append(s.delete_one_call_args, org_id)
+	s.delete_one_call_args = append(s.delete_one_call_args, []string{user_id, project_id})
 	
 	return s.delete_one_err
 }
@@ -129,11 +138,15 @@ func (s *StubProjectService) FindById(user_id string, org_id string) (*database.
 }
 
 func (s *StubProjectService) FindByIdAndRole(user_id string, org_id string, roles []string) (*database.FindOneProjectByIdAndRoleRow, error) {
+	s.find_by_id_and_role_n_calls += 1
 	return s.find_by_id_and_role_return, s.find_by_id_and_role_error
 }
 
-func (s *StubProjectService) ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error) {
-	return []database.FindProjectsForUserRow{}, nil
+func (s *StubProjectService) ListMyProjects(user_id string, org_id string) ([]database.FindProjectsForUserRow, error) {
+	s.list_my_projects_n_calls += 1
+	s.list_my_projects_call_args = append(s.list_my_projects_call_args, []string{user_id, org_id})
+
+	return s.list_my_projects_return, s.list_my_projects_err
 }
 
 type StubApplicationService struct {
@@ -163,6 +176,11 @@ type StubApplicationService struct {
 	Find_one_config_n_calls int
 	Find_one_config_return *dto.ApplicationConfigResponse
 	Find_one_config_error error
+	List_by_project_n_calls int
+	List_by_project_calls_arg1 []string
+	List_by_project_calls_arg2 []string
+	List_by_project_return []dto.ApplicationListEntry
+	List_by_project_err error
 }
 
 func (s *StubApplicationService) Clear() {
@@ -192,6 +210,11 @@ func (s *StubApplicationService) Clear() {
 	s.Find_one_config_calls_arg2 = []string{}
 	s.Find_one_config_return = nil
 	s.Find_one_config_error = nil
+	s.List_by_project_n_calls = 0
+	s.List_by_project_calls_arg1 = []string{}
+	s.List_by_project_calls_arg2 = []string{}
+	s.List_by_project_return = nil
+	s.List_by_project_err = nil
 }
 
 func (s *StubApplicationService) Create(user_id string, dto dto.CreateApplicationDto) (*database.Application, error) {
@@ -228,6 +251,13 @@ func (s *StubApplicationService) FindOneConfig(app_id string, user_id string) (*
 	s.Find_one_config_calls_arg1 = append(s.Find_one_config_calls_arg1, app_id)
 	s.Find_one_config_calls_arg2 = append(s.Find_one_config_calls_arg2, user_id)
 	return s.Find_one_config_return, s.Find_one_config_error
+}
+
+func (s *StubApplicationService) ListByProject(user_id string, project_id string) ([]dto.ApplicationListEntry, error) {
+	s.List_by_project_n_calls += 1
+	s.List_by_project_calls_arg1 = append(s.List_by_project_calls_arg1, user_id)
+	s.List_by_project_calls_arg2 = append(s.List_by_project_calls_arg2, project_id)
+	return s.List_by_project_return, s.List_by_project_err
 }
 
 type StubDeploymentService struct {

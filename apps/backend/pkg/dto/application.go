@@ -39,6 +39,25 @@ type ListMyApplicationEntryApplication struct {
 
 type ListMyApplicationResponse = []ListMyApplicationEntryApplication
 
+type ApplicationListLatestDeployment struct {
+	AppDpID string `json:"app_dp_id"`
+	VersionNumber int `json:"version_number"`
+	Status int `json:"status"`
+	Outcome string `json:"outcome"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type ApplicationListEntry struct {
+	AppID string `json:"app_id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Status string `json:"status"`
+	LatestDeployment *ApplicationListLatestDeployment `json:"latest_deployment"`
+}
+
 type ApplicationConfigResponse struct {
 	AppCfgID string`json:"app_cfg_id"`
 	AppID string `json:"app_id"`

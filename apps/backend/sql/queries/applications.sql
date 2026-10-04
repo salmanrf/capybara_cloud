@@ -59,3 +59,56 @@ DO UPDATE SET
   variables_json = $3, 
   updated_at = NOW()
 RETURNING *;
+-- name: ListApplicationsByProject :many
+SELECT
+  "app".app_id,
+  "app".name,
+  "app".type,
+  "app".created_at,
+  "app".updated_at,
+  "instance".status AS instance_status,
+  "dp".app_dp_id AS latest_dp_id,
+  "dp".version_number AS latest_dp_version_number,
+  "dp".status AS latest_dp_status,
+  "dp".created_at AS latest_dp_created_at,
+  "dp".updated_at AS latest_dp_updated_at
+FROM
+  "applications" AS "app"
+INNER JOIN
+  "project_members" AS "pm"
+    ON
+      "pm".project_id = "app".project_id
+      AND
+      "pm".user_id = @user_id
+LEFT JOIN
+  "deployment_instances" AS "instance"
+    ON
+      "instance".instance_id = (
+        SELECT
+          "di".instance_id
+        FROM
+          "deployment_instances" AS "di"
+        WHERE
+          "di".app_id = "app".app_id
+        ORDER BY
+          "di".created_at DESC
+        LIMIT 1
+      )
+LEFT JOIN
+  "application_deployments" AS "dp"
+    ON
+      "dp".app_dp_id = (
+        SELECT
+          "ad".app_dp_id
+        FROM
+          "application_deployments" AS "ad"
+        WHERE
+          "ad".app_id = "app".app_id
+        ORDER BY
+          "ad".version_number DESC
+        LIMIT 1
+      )
+WHERE
+  "app".project_id = @project_id
+ORDER BY
+  "app".name ASC;

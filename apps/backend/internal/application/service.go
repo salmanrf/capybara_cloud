@@ -11,9 +11,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	pkgerr "github.com/pkg/errors"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/project"
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
+	shared_deployment "github.com/salmanrf/capybara-cloud/packages/shared-go/deployment"
+	errutils "github.com/salmanrf/capybara-cloud/packages/shared-go/errors"
 )
 
 type Service interface {
@@ -22,6 +25,7 @@ type Service interface {
 	FindOneComplete(app_id string, user_id string) (*database.FindOneApplicationCompleteRow, error)
 	CreateConfig(app_id string, user_id string, dto dto.CreateApplicationConfigDto) (*database.ApplicationConfig, error)
 	FindOneConfig(app_id string, user_id string) (*dto.ApplicationConfigResponse, error)
+	ListByProject(user_id string, project_id string) ([]dto.ApplicationListEntry, error)
 }
 
 type service struct {
@@ -53,7 +57,7 @@ func (s *service) Create(user_id string, dto dto.CreateApplicationDto) (*databas
 	}
 
 	if proj_user == nil {
-		permission_err := errors.New("permisssion_denied")
+		permission_err := pkgerr.New("permisssion_denied")
 		return nil, permission_err
 	}
 
@@ -97,7 +101,7 @@ func (s *service) FindOneComplete(app_id string, user_id string) (*database.Find
 		return nil, nil
 	}
 	if !app_complete.ProjectMember.ProjectID.Valid {
-		return nil, errors.New("permission_denied")
+		return nil, pkgerr.New("permission_denied")
 	}
 
 	return app_complete, nil
@@ -109,13 +113,13 @@ func (s *service) Update(app_id string, user_id string, dto dto.UpdateApplicatio
 	if err != nil {
 		errmsg := err.Error()
 		if strings.Contains(errmsg, "no rows") {
-			return nil, errors.New("not_found")
+			return nil, pkgerr.New("not_found")
 		}
 		return nil, err
 	}
 
 	if app_with_pm == nil {
-		return nil, errors.New("not_found")
+		return nil, pkgerr.New("not_found")
 	}
 
 	updated_app, err := s.repository.UpdateOneApplication(
@@ -153,16 +157,16 @@ func (s *service) CreateConfig(app_id string, user_id string, dto dto.CreateAppl
 		return nil, err
 	}
 	if app_with_pm == nil || !app_with_pm.AppID.Valid {
-		return nil, errors.New("not_found")
+		return nil, pkgerr.New("not_found")
 	}
 	if !app_with_pm.ProjectMember.ProjectID.Valid {
-		return nil, errors.New("permission_denied")
+		return nil, pkgerr.New("permission_denied")
 	}
 
 	variables_json := bytes.NewBuffer([]byte{})
 	encoder := json.NewEncoder(variables_json)
 	if err := encoder.Encode(dto.Variables); err != nil {
-		return nil, err
+		return nil, pkgerr.WithStack(err)
 	}
 
 	params := database.CreateApplicationConfigParams{
@@ -192,19 +196,19 @@ func (s *service) FindOneConfig(app_id string, user_id string) (*dto.Application
 		return nil, err
 	}
 	if app_with_pm == nil || !app_with_pm.AppID.Valid {
-		return nil, errors.New("not_found")
+		return nil, pkgerr.New("not_found")
 	}
 	if !app_with_pm.ProjectMember.ProjectID.Valid {
-		return nil, errors.New("permission_denied")
+		return nil, pkgerr.New("permission_denied")
 	}
 	if !app_with_pm.ApplicationConfig.AppCfgID.Valid {
-		return nil, errors.New("not_found")
+		return nil, pkgerr.New("not_found")
 	}
 
 	var configVariables map[string]any
 	if len(app_with_pm.ApplicationConfig.VariablesJson) > 0 {
 		if err := json.Unmarshal(app_with_pm.ApplicationConfig.VariablesJson, &configVariables); err != nil {
-			return nil, err
+			return nil, pkgerr.WithStack(err)
 		}
 	} else {
 		configVariables = make(map[string]any)
@@ -221,4 +225,49 @@ func (s *service) FindOneConfig(app_id string, user_id string) (*dto.Application
 	}
 
 	return response, nil
+}
+
+func (s *service) ListByProject(user_id string, project_id string) ([]dto.ApplicationListEntry, error) {
+	user_uuid := pgtype.UUID{}
+	user_uuid.Scan(user_id)
+	project_uuid := pgtype.UUID{}
+	project_uuid.Scan(project_id)
+
+	rows, err := s.repository.ListByProject(
+		database.ListApplicationsByProjectParams{
+			UserID: user_uuid,
+			ProjectID: project_uuid,
+		},
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return []dto.ApplicationListEntry{}, nil
+	}
+	if err != nil {
+		return nil, errutils.Mask(err, "unable to list applications, db query failed")
+	}
+
+	entries := make([]dto.ApplicationListEntry, len(rows))
+	for i, row := range rows {
+		entries[i] = dto.ApplicationListEntry{
+			AppID: row.AppID.String(),
+			Name: row.Name,
+			Type: row.Type,
+			CreatedAt: row.CreatedAt.Time,
+			UpdatedAt: row.UpdatedAt.Time,
+			Status: DeriveAppStatus(row.InstanceStatus),
+		}
+
+		if row.LatestDpID.Valid {
+			entries[i].LatestDeployment = &dto.ApplicationListLatestDeployment{
+				AppDpID: row.LatestDpID.String(),
+				VersionNumber: int(row.LatestDpVersionNumber.Int32),
+				Status: int(row.LatestDpStatus.Int32),
+				Outcome: shared_deployment.DeriveDeploymentOutcome(row.LatestDpStatus.Int32),
+				CreatedAt: row.LatestDpCreatedAt.Time,
+				UpdatedAt: row.LatestDpUpdatedAt.Time,
+			}
+		}
+	}
+
+	return entries, nil
 }

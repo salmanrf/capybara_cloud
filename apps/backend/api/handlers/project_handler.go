@@ -11,7 +11,6 @@ import (
 	"github.com/salmanrf/capybara-cloud/apps/backend/pkg/dto"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/utils"
 
-	pkgerr "github.com/pkg/errors"
 )
 
 type project_handler struct {
@@ -39,7 +38,7 @@ func (h *project_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
-		h.logger.Error("[HandleCreate] Unable to parse request", "error", pkgerr.WithStack(err))
+		h.logger.Error("[HandleCreate] Unable to parse request", "error", err)
 		utils.ResponseWithError(
 			w,
 			http.StatusUnprocessableEntity,
@@ -51,7 +50,7 @@ func (h *project_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	_, err := body.Validate()
 	if err != nil {
-		h.logger.Error("[HandleCreate] Unable to validate request", "error", pkgerr.WithStack(err))
+		h.logger.Error("[HandleCreate] Unable to validate request", "error", err)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -61,11 +60,14 @@ func (h *project_handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.project_service.Create(user_id, body.OrgId, body.Name)
 	if err != nil {
-		h.logger.Error("[HandleCreate] Unable to create project", "error", pkgerr.WithStack(err), "user_id", user_id, "org_id", body.OrgId, "project_name", body.Name)
+		h.logger.Error("[HandleCreate] Unable to create project", "error", err, "user_id", user_id, "org_id", body.OrgId, "project_name", body.Name)
 		errmsg := err.Error()
-		if strings.Contains(errmsg, "duplicate key") {
+		switch {
+		case errmsg == "invalid_role":
+			utils.ResponseWithError(w, http.StatusForbidden, nil, "Insufficient permission to create project")
+		case strings.Contains(errmsg, "duplicate key"):
 			utils.ResponseWithError(w, http.StatusBadRequest, nil, "Project with this name already exists")
-		} else {
+		default:
 			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
 		}
 		return
@@ -97,7 +99,7 @@ func (h *project_handler) HandleFindOne(w http.ResponseWriter, r *http.Request) 
 	project, err := h.project_service.FindById(user_id, project_id)
 
 	if err != nil {
-		h.logger.Error("[HandleFindOne] Unable to find project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
+		h.logger.Error("[HandleFindOne] Unable to find project", "error", err, "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithSuccess[any](
 			w,
 			http.StatusOK,
@@ -129,9 +131,18 @@ func (h *project_handler) HandleListMyProjects(w http.ResponseWriter, r *http.Re
 	rctx := r.Context()
 	user_id := rctx.Value("user_id").(string)
 
-	projectuses, err := h.project_service.ListMyProjects(user_id)
+	org_id := r.URL.Query().Get("org_id")
+	if org_id != "" {
+		org_uuid := pgtype.UUID{}
+		if err := org_uuid.Scan(org_id); err != nil {
+			utils.ResponseWithError(w, http.StatusBadRequest, nil, "invalid org_id format, must be a valid uuid string")
+			return
+		}
+	}
+
+	projectuses, err := h.project_service.ListMyProjects(user_id, org_id)
 	if err != nil {
-		h.logger.Error("[HandleListMyProjects] Unable to list projects", "error", pkgerr.WithStack(err), "user_id", user_id)
+		h.logger.Error("[HandleListMyProjects] Unable to list projects", "error", err, "user_id", user_id)
 		utils.ResponseWithError(
 			w,
 			http.StatusInternalServerError,
@@ -176,66 +187,27 @@ func (h *project_handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&body); err != nil {
-		h.logger.Error("[HandleUpdate] Unable to parse request", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
+		h.logger.Error("[HandleUpdate] Unable to parse request", "error", err, "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithError(w, http.StatusUnprocessableEntity, nil, "Unprocessable Entity")
 		return
 	}
 
 	if _, err := body.Validate(); err != nil {
-		h.logger.Error("[HandleUpdate] Unable to validate request", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
+		h.logger.Error("[HandleUpdate] Unable to validate request", "error", err, "user_id", user_id, "project_id", project_id)
 		utils.ResponseWithError(w, http.StatusBadRequest, nil, err.Error())
 		return
 	}
 
-	project, err := h.project_service.FindByIdAndRole(
-		user_id,
-		project_id,
-		[]string{"owner"},
-	)
+	new_project, err := h.project_service.UpdateOne(user_id, project_id, body.Name)
 
 	if err != nil {
-		h.logger.Error("[HandleUpdate] Unable to find project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusNotFound,
-			nil,
-			"Project not found",
-		)
-		return
-	}
-
-	if project == nil {
-		utils.ResponseWithError(
-			w,
-			http.StatusNotFound,
-			nil,
-			"Project not found",
-		)
-		return
-	}
-
-	if project.Role.String != "owner" {
-		utils.ResponseWithError(
-			w,
-			http.StatusForbidden,
-			nil,
-			"Insufficient permission to update projectanization",
-		)
-		return
-	}
-
-	project.Name = pgtype.Text{String: body.Name, Valid: true}
-
-	new_project, err := h.project_service.UpdateOne(project)
-
-	if err != nil {
-		h.logger.Error("[HandleUpdate] Unable to update project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id, "project_name", body.Name)
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusInternalServerError,
-			nil,
-			"Internal server error",
-		)
+		h.logger.Error("[HandleUpdate] Unable to update project", "error", err, "user_id", user_id, "project_id", project_id, "project_name", body.Name)
+		switch err.Error() {
+		case "invalid_role":
+			utils.ResponseWithError(w, http.StatusForbidden, nil, "Insufficient permission to update project")
+		default:
+			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
+		}
 		return
 	}
 
@@ -262,53 +234,16 @@ func (h *project_handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.project_service.FindByIdAndRole(
-		user_id,
-		project_id,
-		[]string{"owner"},
-	)
+	err := h.project_service.DeleteOne(user_id, project_id)
 
 	if err != nil {
-		h.logger.Error("[HandleDelete] Unable to find project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusNotFound,
-			nil,
-			"Project not found",
-		)
-		return
-	}
-
-	if project == nil {
-		utils.ResponseWithSuccess[any](
-			w,
-			http.StatusNoContent,
-			nil,
-			"Project updated successfuly",
-		)
-		return
-	}
-
-	if project.Role.String != "owner" {
-		utils.ResponseWithError(
-			w,
-			http.StatusForbidden,
-			nil,
-			"Insufficient permission to update projectanization",
-		)
-		return
-	}
-
-	err = h.project_service.DeleteOne(project.ProjectID.String())
-
-	if err != nil {
-		h.logger.Error("[HandleDelete] Unable to delete project", "error", pkgerr.WithStack(err), "user_id", user_id, "project_id", project_id)
-		utils.ResponseWithError(
-			w,
-			http.StatusInternalServerError,
-			nil,
-			"Internal server error",
-		)
+		h.logger.Error("[HandleDelete] Unable to delete project", "error", err, "user_id", user_id, "project_id", project_id)
+		switch err.Error() {
+		case "invalid_role":
+			utils.ResponseWithError(w, http.StatusForbidden, nil, "Insufficient permission to delete project")
+		default:
+			utils.ResponseWithError(w, http.StatusInternalServerError, nil, "Internal server error")
+		}
 		return
 	}
 

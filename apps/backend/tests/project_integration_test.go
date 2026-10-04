@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/logger"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -125,6 +127,53 @@ func TestProjectCreateIntegration(t *testing.T) {
 		}
 	})
 
+	create_err_cases := []struct {
+		name        string
+		service_err error
+		want_status int
+	}{
+		{"it returns status code 403 when the service rejects the role", errors.New("invalid_role"), http.StatusForbidden},
+		{"it returns status code 400 when the project name already exists", errors.New(`ERROR: duplicate key value violates unique constraint "projects_name_key" (SQLSTATE 23505)`), http.StatusBadRequest},
+		{"it returns status code 500 when the service fails", errors.New("db down"), http.StatusInternalServerError},
+	}
+
+	for _, c := range create_err_cases {
+		t.Run(c.name, func (t *testing.T) {
+			defer project_service.Clear()
+
+			req_body := bytes.NewReader([]byte(`
+				{
+					"org_id": "64c5e7da-3e02-4db8-aa2a-aa5161c085f7",
+					"name": "Feline Protector"
+				}
+			`))
+			req, _ := http.NewRequest(http.MethodPost, "/api/projects", req_body)
+			res := httptest.NewRecorder()
+
+			jwt_validator.validate_return = "123"
+			project_service.create_err = c.service_err
+
+			sid_cookie := &http.Cookie{
+				Name: "sid",
+				Value: "123",
+				Path: "/",
+				SameSite: http.SameSiteStrictMode,
+				MaxAge: 3600 * 24,
+				HttpOnly: true,
+				Secure: os.Getenv("STAGE") != "local",
+			}
+			req.AddCookie(sid_cookie)
+
+			server.ServeHTTP(res, req)
+
+			got_status := res.Result().StatusCode
+			want_status := c.want_status
+			if got_status != want_status {
+				t.Errorf("got status code %d, want %d", got_status, want_status)
+			}
+		})
+	}
+
 	t.Run("it returns status code 400 when validation failed", func (t *testing.T) {
 		tt := []struct{
 			desc string
@@ -235,7 +284,7 @@ func TestProjectGetOne(t *testing.T) {
 		HttpOnly: true,
 		Secure: os.Getenv("STAGE") != "local",
 	}
-	
+
 	project_service.find_by_id_return = &database.FindOneProjectByIdRow{
 		Name: pgtype.Text{String: "Capybara"},
 	}
@@ -309,16 +358,8 @@ func TestProjectUpdateOne(t *testing.T) {
 	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
 
-	mock_user := &database.User{
-		Email: "Salman",
-		UserID: pgtype.UUID{},
-		Username: "frnamlas",
-		CreatedAt: pgtype.Timestamp{},
-		UpdatedAt: pgtype.Timestamp{},
-		FullName: "Salman RF",
-	}
-	user_service.find_by_id_return = mock_user
-	user_service.find_by_id_err = nil
+	mock_user_id := "3ad11d5d-5a7e-433d-ac51-fba7a645f3d4"
+	jwt_validator.validate_return = mock_user_id
 
 	server := api.NewAPIServer(
 		logger,
@@ -340,28 +381,20 @@ func TestProjectUpdateOne(t *testing.T) {
 		HttpOnly: true,
 		Secure: os.Getenv("STAGE") != "local",
 	}
-	
-	project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-		Name: pgtype.Text{String: "Capybara", Valid: true},
-	}
+
+	mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+	mock_project_uuid := pgtype.UUID{}
+	mock_project_uuid.Scan(mock_project_id)
 
 	t.Run("it should return status 200 and the updated project", func (t *testing.T) {
-		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_project_uuid := pgtype.UUID{}
-		mock_project_uuid.Scan(mock_project_id)
-
-		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-			ProjectID: mock_project_uuid,
-			Name: pgtype.Text{String: "Capybara", Valid: true},
-			Role: pgtype.Text{String: "owner", Valid: true},
-		}
+		defer project_service.Clear()
 
 		new_name := "Binturong Org"
-
 		project_service.update_one_return = &database.Project{
 			ProjectID: mock_project_uuid,
 			Name: new_name,
 		}
+
 		payload := fmt.Sprintf(`{"name": "%s"}`, new_name)
 		body := bytes.NewReader([]byte(payload))
 		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/projects/%s", mock_project_id), body)
@@ -373,61 +406,76 @@ func TestProjectUpdateOne(t *testing.T) {
 
 		got_status := res.Result().StatusCode
 		want_status := http.StatusOK
-		
 		if got_status != want_status {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
-		
+
 		var got_body utils.BaseResponse[any]
 		decoder := json.NewDecoder(res.Result().Body)
 		if err := decoder.Decode(&got_body); err != nil {
-			t.Errorf("got error %s, want nil", err.Error())
+			t.Fatalf("got error %s, want nil", err.Error())
 		}
-		
+
 		got_name := got_body.Data.(map[string]any)["name"]
-		want_id := new_name
-		
-		if got_name != want_id {
-			t.Errorf("got name %v, want %s", got_name, want_id)
+		want_name := new_name
+		if got_name != want_name {
+			t.Errorf("got name %v, want %s", got_name, want_name)
 		}
 
-		got_update_one_calls := project_service.update_one_n_calls
+		got_update_one_n_calls := project_service.update_one_n_calls
 		want_update_one_n_calls := 1
+		if got_update_one_n_calls != want_update_one_n_calls {
+			t.Fatalf("got update one called %d times, want %d", got_update_one_n_calls, want_update_one_n_calls)
+		}
 
-		if got_update_one_calls != want_update_one_n_calls {
-			t.Errorf("got update one called %v times, want %v", got_update_one_calls, want_update_one_n_calls)
+		got_args := project_service.update_one_call_args[0]
+		want_args := []string{mock_user_id, mock_project_id, new_name}
+		if !slices.Equal(got_args, want_args) {
+			t.Errorf("got update one called with %v, want %v", got_args, want_args)
 		}
 	})
 
-	t.Run("it should return status 403 if doesn't have sufficient permission", func (t *testing.T) {
-		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_project_uuid := pgtype.UUID{}
-		mock_project_uuid.Scan(mock_project_id)
+	cases := []struct {
+		name        string
+		service_err error
+		want_status int
+	}{
+		{"it should return status 403 when the service rejects the role", errors.New("invalid_role"), http.StatusForbidden},
+		{"it should return status 500 when the service fails", errors.New("db down"), http.StatusInternalServerError},
+	}
 
-		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-			ProjectID: mock_project_uuid,
-			Name: pgtype.Text{String: "Capybara", Valid: true},
-			Role: pgtype.Text{String: "member", Valid: true},
-		}
+	for _, c := range cases {
+		t.Run(c.name, func (t *testing.T) {
+			defer project_service.Clear()
 
-		payload := `{"name": "Tai Lung"}`
-		body := bytes.NewReader([]byte(payload))
-		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/projects/%s", mock_project_id), body)
-		res := httptest.NewRecorder()
+			project_service.update_one_err = c.service_err
 
-		req.AddCookie(sid_cookie)
+			payload := `{"name": "Tai Lung"}`
+			body := bytes.NewReader([]byte(payload))
+			req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/projects/%s", mock_project_id), body)
+			res := httptest.NewRecorder()
 
-		server.ServeHTTP(res, req)
+			req.AddCookie(sid_cookie)
 
-		got_status := res.Result().StatusCode
-		want_status := http.StatusForbidden
-		
-		if got_status != want_status {
-			t.Errorf("got status %d, want %d", got_status, want_status)
-		}
-	})
+			server.ServeHTTP(res, req)
+
+			got_status := res.Result().StatusCode
+			want_status := c.want_status
+			if got_status != want_status {
+				t.Errorf("got status %d, want %d", got_status, want_status)
+			}
+
+			got_find_n_calls := project_service.find_by_id_and_role_n_calls
+			want_find_n_calls := 0
+			if got_find_n_calls != want_find_n_calls {
+				t.Errorf("got find by id and role called %d times, want %d", got_find_n_calls, want_find_n_calls)
+			}
+		})
+	}
 
 	t.Run("it should return status 404 if project id not provided", func (t *testing.T) {
+		defer project_service.Clear()
+
 		req, _ := http.NewRequest(http.MethodPut, "/api/projects/", nil)
 		res := httptest.NewRecorder()
 
@@ -437,34 +485,14 @@ func TestProjectUpdateOne(t *testing.T) {
 
 		got_status := res.Result().StatusCode
 		want_status := http.StatusNotFound
-
 		if got_status != want_status {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
-	})
-	t.Run("it should return status 404 if project not found", func (t *testing.T) {
-		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_project_uuid := pgtype.UUID{}
-		mock_project_uuid.Scan(mock_project_id)
 
-		project_service.find_by_id_and_role_return = nil
-		project_service.find_by_id_and_role_error = nil
-
-		new_name := "Binturong Org"
-		payload := fmt.Sprintf(`{"name": "%s"}`, new_name)
-		body := bytes.NewReader([]byte(payload))
-		req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/projects/%s", mock_project_id), body)
-		res := httptest.NewRecorder()
-
-		req.AddCookie(sid_cookie)
-
-		server.ServeHTTP(res, req)
-
-		got_status := res.Result().StatusCode
-		want_status := http.StatusNotFound
-
-		if got_status != want_status {
-			t.Errorf("got status %d, want %d", got_status, want_status)
+		got_update_one_n_calls := project_service.update_one_n_calls
+		want_update_one_n_calls := 0
+		if got_update_one_n_calls != want_update_one_n_calls {
+			t.Errorf("got update one called %d times, want %d", got_update_one_n_calls, want_update_one_n_calls)
 		}
 	})
 }
@@ -481,16 +509,8 @@ func TestProjectDeleteOne(t *testing.T) {
 	deployment_service := &StubDeploymentService{}
 	jwt_validator := &StubJwtValidator{}
 
-	mock_user := &database.User{
-		Email: "Salman",
-		UserID: pgtype.UUID{},
-		Username: "frnamlas",
-		CreatedAt: pgtype.Timestamp{},
-		UpdatedAt: pgtype.Timestamp{},
-		FullName: "Salman RF",
-	}
-	user_service.find_by_id_return = mock_user
-	user_service.find_by_id_err = nil
+	mock_user_id := "3ad11d5d-5a7e-433d-ac51-fba7a645f3d4"
+	jwt_validator.validate_return = mock_user_id
 
 	server := api.NewAPIServer(
 		logger,
@@ -512,19 +532,12 @@ func TestProjectDeleteOne(t *testing.T) {
 		HttpOnly: true,
 		Secure: os.Getenv("STAGE") != "local",
 	}
-	
-	project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-		Role: pgtype.Text{String: "owner", Valid: true},
-	}
+
+	mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
 
 	t.Run("it should return status 204 on deletion", func (t *testing.T) {
-		project_service.delete_one_n_calls = 0
-		project_service.delete_one_call_args = []string{}
-		
-		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		mock_project_uuid := pgtype.UUID{}
-		mock_project_uuid.Scan(mock_project_id)
-		project_service.find_by_id_and_role_return.ProjectID = mock_project_uuid
+		defer project_service.Clear()
+
 		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
 		res := httptest.NewRecorder()
 
@@ -534,28 +547,62 @@ func TestProjectDeleteOne(t *testing.T) {
 
 		got_status := res.Result().StatusCode
 		want_status := http.StatusNoContent
-		
 		if got_status != want_status {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
 
-		got_called := project_service.delete_one_n_calls
-		want_called := 1
-		got_called_with := project_service.delete_one_call_args[0]
-		want_called_with := mock_project_id
-
-		if got_called != want_called {
-			t.Errorf("got update one called %d times, want %d", got_called, want_called)
+		got_delete_one_n_calls := project_service.delete_one_n_calls
+		want_delete_one_n_calls := 1
+		if got_delete_one_n_calls != want_delete_one_n_calls {
+			t.Fatalf("got delete one called %d times, want %d", got_delete_one_n_calls, want_delete_one_n_calls)
 		}
 
-		if got_called_with != want_called_with {
-			t.Errorf("got update one called with %s, want %s", got_called_with, want_called_with)
+		got_args := project_service.delete_one_call_args[0]
+		want_args := []string{mock_user_id, mock_project_id}
+		if !slices.Equal(got_args, want_args) {
+			t.Errorf("got delete one called with %v, want %v", got_args, want_args)
 		}
 	})
 
+	cases := []struct {
+		name        string
+		service_err error
+		want_status int
+	}{
+		{"it should return status 403 when the service rejects the role", errors.New("invalid_role"), http.StatusForbidden},
+		{"it should return status 500 when the service fails", errors.New("db down"), http.StatusInternalServerError},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func (t *testing.T) {
+			defer project_service.Clear()
+
+			project_service.delete_one_err = c.service_err
+
+			req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
+			res := httptest.NewRecorder()
+
+			req.AddCookie(sid_cookie)
+
+			server.ServeHTTP(res, req)
+
+			got_status := res.Result().StatusCode
+			want_status := c.want_status
+			if got_status != want_status {
+				t.Errorf("got status %d, want %d", got_status, want_status)
+			}
+
+			got_find_n_calls := project_service.find_by_id_and_role_n_calls
+			want_find_n_calls := 0
+			if got_find_n_calls != want_find_n_calls {
+				t.Errorf("got find by id and role called %d times, want %d", got_find_n_calls, want_find_n_calls)
+			}
+		})
+	}
+
 	t.Run("it should return status 404 when project_id is not specified", func (t *testing.T) {
-		project_service.find_by_id_and_role_return = nil
-		
+		defer project_service.Clear()
+
 		req, _ := http.NewRequest(http.MethodDelete, "/api/projects/", nil)
 		res := httptest.NewRecorder()
 
@@ -565,17 +612,60 @@ func TestProjectDeleteOne(t *testing.T) {
 
 		got_status := res.Result().StatusCode
 		want_status := http.StatusNotFound
-		
 		if got_status != want_status {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
-	})
 
-	t.Run("it should return status 204 when org not found (already deleted)", func (t *testing.T) {
-		project_service.find_by_id_and_role_return = nil
-		
-		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
+		got_delete_one_n_calls := project_service.delete_one_n_calls
+		want_delete_one_n_calls := 0
+		if got_delete_one_n_calls != want_delete_one_n_calls {
+			t.Errorf("got delete one called %d times, want %d", got_delete_one_n_calls, want_delete_one_n_calls)
+		}
+	})
+}
+
+func TestProjectListMine(t *testing.T) {
+	logger, cleanup, _ := logger.InitLogger("", nil)
+	defer cleanup()
+
+	user_service := &StubUserService{}
+	auth_service := &StubAuthService{}
+	org_service := &StubOrgService{}
+	project_service := &StubProjectService{}
+	application_service := &StubApplicationService{}
+	deployment_service := &StubDeploymentService{}
+	jwt_validator := &StubJwtValidator{}
+
+	mock_user_id := "3ad11d5d-5a7e-433d-ac51-fba7a645f3d4"
+	jwt_validator.validate_return = mock_user_id
+
+	server := api.NewAPIServer(
+		logger,
+		application_service,
+		deployment_service,
+		user_service,
+		auth_service,
+		org_service,
+		project_service,
+		jwt_validator,
+	)
+
+	sid_cookie := &http.Cookie{
+		Name: "sid",
+		Value: "123",
+		Path: "/",
+		SameSite: http.SameSiteStrictMode,
+		MaxAge: 3600 * 24,
+		HttpOnly: true,
+		Secure: os.Getenv("STAGE") != "local",
+	}
+
+	mock_org_id := "64c5e7da-3e02-4db8-aa2a-aa5161c085f7"
+
+	t.Run("it should pass the org_id filter to the project service", func (t *testing.T) {
+		defer project_service.Clear()
+
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects?org_id=%s", mock_org_id), nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -583,20 +673,28 @@ func TestProjectDeleteOne(t *testing.T) {
 		server.ServeHTTP(res, req)
 
 		got_status := res.Result().StatusCode
-		want_status := http.StatusNoContent
-		
+		want_status := http.StatusOK
 		if got_status != want_status {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
+
+		got_n_calls := project_service.list_my_projects_n_calls
+		want_n_calls := 1
+		if got_n_calls != want_n_calls {
+			t.Fatalf("got list my projects called %d times, want %d", got_n_calls, want_n_calls)
+		}
+
+		got_args := project_service.list_my_projects_call_args[0]
+		want_args := []string{mock_user_id, mock_org_id}
+		if !slices.Equal(got_args, want_args) {
+			t.Errorf("got args %v, want %v", got_args, want_args)
+		}
 	})
 
-	t.Run("it should return status 403 when doesn't have suficient permission", func (t *testing.T) {
-		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-			Role: pgtype.Text{String: "owner", Valid: true},
-		}
-		
-		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
+	t.Run("it should return status 400 when org_id is not a uuid", func (t *testing.T) {
+		defer project_service.Clear()
+
+		req, _ := http.NewRequest(http.MethodGet, "/api/projects?org_id=not-a-uuid", nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -604,20 +702,49 @@ func TestProjectDeleteOne(t *testing.T) {
 		server.ServeHTTP(res, req)
 
 		got_status := res.Result().StatusCode
-		want_status := http.StatusNoContent
-		
+		want_status := http.StatusBadRequest
 		if got_status != want_status {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
+
+		got_n_calls := project_service.list_my_projects_n_calls
+		want_n_calls := 0
+		if got_n_calls != want_n_calls {
+			t.Errorf("got list my projects called %d times, want %d", got_n_calls, want_n_calls)
+		}
 	})
 
-	t.Run("it should return status 403 when doesn't have suficient permission", func (t *testing.T) {
-		project_service.find_by_id_and_role_return = &database.FindOneProjectByIdAndRoleRow{
-			Role: pgtype.Text{String: "owner", Valid: true},
+	t.Run("it should return status 401 without the sid cookie", func (t *testing.T) {
+		defer project_service.Clear()
+
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects?org_id=%s", mock_org_id), nil)
+		res := httptest.NewRecorder()
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusUnauthorized
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
 		}
 
-		mock_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
-		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/projects/%s", mock_project_id), nil)
+		got_n_calls := project_service.list_my_projects_n_calls
+		want_n_calls := 0
+		if got_n_calls != want_n_calls {
+			t.Errorf("got list my projects called %d times, want %d", got_n_calls, want_n_calls)
+		}
+	})
+
+	t.Run("it should list every project when org_id is not given", func (t *testing.T) {
+		defer project_service.Clear()
+
+		mock_project_uuid := pgtype.UUID{}
+		mock_project_uuid.Scan("28451bd5-0113-4ec6-9540-6646ae72a957")
+		project_service.list_my_projects_return = []database.FindProjectsForUserRow{
+			{ProjectID: mock_project_uuid, Role: pgtype.Text{String: "owner", Valid: true}},
+		}
+
+		req, _ := http.NewRequest(http.MethodGet, "/api/projects", nil)
 		res := httptest.NewRecorder()
 
 		req.AddCookie(sid_cookie)
@@ -625,8 +752,81 @@ func TestProjectDeleteOne(t *testing.T) {
 		server.ServeHTTP(res, req)
 
 		got_status := res.Result().StatusCode
-		want_status := http.StatusNoContent
-		
+		want_status := http.StatusOK
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
+		}
+
+		got_args := project_service.list_my_projects_call_args
+		want_args := []string{mock_user_id, ""}
+		if len(got_args) != 1 {
+			t.Fatalf("got list my projects called %d times, want 1", len(got_args))
+		}
+		if !slices.Equal(got_args[0], want_args) {
+			t.Errorf("got args %v, want %v", got_args[0], want_args)
+		}
+
+		var got_body map[string]interface{}
+		if err := json.NewDecoder(res.Body).Decode(&got_body); err != nil {
+			t.Fatalf("got error %s, want nil", err.Error())
+		}
+
+		got_data := got_body["data"].([]interface{})
+		if len(got_data) != 1 {
+			t.Fatalf("got %d projects, want 1", len(got_data))
+		}
+
+		got_project_id := got_data[0].(map[string]interface{})["project"].(map[string]interface{})["project_id"]
+		want_project_id := "28451bd5-0113-4ec6-9540-6646ae72a957"
+		if got_project_id != want_project_id {
+			t.Errorf("got project_id %v, want %s", got_project_id, want_project_id)
+		}
+	})
+
+	t.Run("it should return an empty list when the user has no projects in the org", func (t *testing.T) {
+		defer project_service.Clear()
+
+		project_service.list_my_projects_return = []database.FindProjectsForUserRow{}
+
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects?org_id=%s", mock_org_id), nil)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusOK
+		if got_status != want_status {
+			t.Errorf("got status %d, want %d", got_status, want_status)
+		}
+
+		var got_body map[string]json.RawMessage
+		if err := json.NewDecoder(res.Body).Decode(&got_body); err != nil {
+			t.Fatalf("got error %s, want nil", err.Error())
+		}
+
+		got_data := string(got_body["data"])
+		want_data := "[]"
+		if got_data != want_data {
+			t.Errorf("got data %s, want %s", got_data, want_data)
+		}
+	})
+
+	t.Run("it should return status 500 when the project service fails", func (t *testing.T) {
+		defer project_service.Clear()
+
+		project_service.list_my_projects_err = errors.New("unable to find project users, db query failed")
+
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/projects?org_id=%s", mock_org_id), nil)
+		res := httptest.NewRecorder()
+
+		req.AddCookie(sid_cookie)
+
+		server.ServeHTTP(res, req)
+
+		got_status := res.Result().StatusCode
+		want_status := http.StatusInternalServerError
 		if got_status != want_status {
 			t.Errorf("got status %d, want %d", got_status, want_status)
 		}

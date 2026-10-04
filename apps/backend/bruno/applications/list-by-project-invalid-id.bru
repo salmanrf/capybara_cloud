@@ -1,0 +1,15 @@
+meta {
+  name: list apps by project - invalid project_id
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/applications?project_id=not-a-uuid
+  body: none
+  auth: none
+}
+
+params:query {
+  project_id: not-a-uuid
+}

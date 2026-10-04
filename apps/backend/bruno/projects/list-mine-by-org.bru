@@ -1,0 +1,15 @@
+meta {
+  name: list my projects by org - success
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/projects?org_id={{org_id}}
+  body: none
+  auth: none
+}
+
+params:query {
+  org_id: {{org_id}}
+}

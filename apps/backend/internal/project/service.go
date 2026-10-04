@@ -2,42 +2,43 @@ package project
 
 import (
 	"context"
-	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
+	pkgerr "github.com/pkg/errors"
+	"github.com/salmanrf/capybara-cloud/apps/backend/internal/organization"
 	"github.com/salmanrf/capybara-cloud/apps/backend/internal/user"
 	"github.com/salmanrf/capybara-cloud/packages/shared-go/database"
+	errutils "github.com/salmanrf/capybara-cloud/packages/shared-go/errors"
 )
 
 type Service interface {
 	Create(user_id string, org_id string, project_name string) (*database.Project, error)
-	UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*database.Project, error)
-	DeleteOne(project_id string) error
+	UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error)
+	DeleteOne(user_id string, project_id string) error
 	FindById(user_id string, project_id string) (*database.FindOneProjectByIdRow, error)
 	FindByIdAndRole(user_id string, project_id string, roles []string) (*database.FindOneProjectByIdAndRoleRow, error)
-	ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error)
+	ListMyProjects(user_id string, org_id string) ([]database.FindProjectsForUserRow, error)
 }
 
 type service struct {
 	ctx context.Context
 	logger *slog.Logger
-	conn *pgxpool.Pool
-	queries *database.Queries
+	repository ProjectRepository
 	user_service user.Service
+	org_service organization.Service
 }
 
-func NewService(ctx context.Context, logger *slog.Logger, conn *pgxpool.Pool, queries *database.Queries, user_service user.Service) Service {
+func NewService(ctx context.Context, logger *slog.Logger, repository ProjectRepository, user_service user.Service, org_service organization.Service) Service {
 	return &service{
 		ctx,
 		logger,
-		conn,
-		queries,
+		repository,
 		user_service,
+		org_service,
 	}
 }
 
@@ -49,55 +50,64 @@ func (s *service) Create(user_id string, org_id string, project_name  string) (*
 	}
 
 	if user == nil {
-		return nil, errors.New("user not found")
+		return nil, pkgerr.New("user not found")
 	}
 
-	trx, err := s.conn.Begin(s.ctx)
+	org, err := s.org_service.FindByIdAndRole(user_id, org_id, []string{})
 	if err != nil {
-		return nil, err
+		return nil, errutils.Mask(err, "invalid_role")
 	}
-	defer trx.Rollback(s.ctx)
-	q := s.queries.WithTx(trx)
+	if org == nil {
+		return nil, pkgerr.New("invalid_role")
+	}
+	allowed_roles := []string{
+		"owner",
+		"editor",
+	}
+	if !slices.Contains(allowed_roles, org.Role) {
+		return nil, pkgerr.New("invalid_role")
+	}
 
 	org_uuid := pgtype.UUID{}
 	org_uuid.Scan(org_id)
-	
-	project, err := q.CreateProject(s.ctx, database.CreateProjectParams{
-		OrgID: org_uuid,
-		Name: project_name,
-	})
 
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = q.CreateProjectMember(
-		s.ctx, 
+	return s.repository.CreateProjectWithMember(
+		database.CreateProjectParams{
+			OrgID: org_uuid,
+			Name: project_name,
+		},
 		database.CreateProjectMemberParams{
-			ProjectID: project.ProjectID,
 			UserID: user.UserID,
 			Role: pgtype.Text{String: "owner", Valid: true},
 		},
 	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	trx.Commit(s.ctx)
-	
-	return &project, nil
 }
 
-func (s *service) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*database.Project, error) {
+func (s *service) UpdateOne(user_id string, project_id string, project_name string) (*database.Project, error) {
+	existing, err := s.FindByIdAndRole(user_id, project_id, []string{})
+	if err != nil {
+		return nil, errutils.Mask(err, "invalid_role")
+	}
+	if existing == nil {
+		return nil, pkgerr.New("invalid_role")
+	}
+
+	allowed_roles := []string{
+		"owner",
+		"editor",
+	}
+	if !slices.Contains(allowed_roles, existing.Role.String) {
+		return nil, pkgerr.New("invalid_role")
+	}
+
 	updated_at := pgtype.Timestamp{
 		Time: time.Now(),
 		Valid: true,
 	}
-	
-	project, err := s.queries.UpdateOneProject(s.ctx, database.UpdateOneProjectParams{
-		ProjectID: dto.ProjectID,
-		Name: dto.Name.String,
+
+	project, err := s.repository.UpdateOne(database.UpdateOneProjectParams{
+		ProjectID: existing.ProjectID,
+		Name: project_name,
 		UpdatedAt: updated_at,
 	})
 
@@ -105,47 +115,27 @@ func (s *service) UpdateOne(dto *database.FindOneProjectByIdAndRoleRow) (*databa
 		return nil, err
 	}
 
-	return &project, nil
+	return project, nil
 }
 
-func (s *service) DeleteOne(project_id string) error {
-	project_uuid := pgtype.UUID{}
-	project_uuid.Scan(project_id)
-
-	trx, err := s.conn.Begin(s.ctx)
-	defer trx.Rollback(s.ctx)
-	q := s.queries.WithTx(trx)
-
+func (s *service) DeleteOne(user_id string, project_id string) error {
+	existing, err := s.FindByIdAndRole(user_id, project_id, []string{})
 	if err != nil {
-		return err
+		return errutils.Mask(err, "invalid_role")
+	}
+	if existing == nil {
+		return pkgerr.New("invalid_role")
 	}
 
-	err = s.DeleteProjectMembers(trx, project_id)
-
-	if err != nil {
-		return err
+	allowed_roles := []string{
+		"owner",
+		"editor",
+	}
+	if !slices.Contains(allowed_roles, existing.Role.String) {
+		return pkgerr.New("invalid_role")
 	}
 
-	err = q.DeleteOneProject(s.ctx, project_uuid)
-
-	if err != nil {
-		return err
-	}
-
-	err = trx.Commit(s.ctx)
-	
-	return err
-}
-
-func (s *service) DeleteProjectMembers(trx pgx.Tx, project_id string) error {
-	project_uuid := pgtype.UUID{}
-	project_uuid.Scan(project_id)
-
-	q := s.queries.WithTx(trx)
-
-	err := q.DeleteProjectMembersByProjectId(s.ctx, project_uuid)
-
-	return err
+	return s.repository.DeleteProjectWithMembers(existing.ProjectID)
 }
 
 func (s *service) FindById(user_id string, project_id string) (*database.FindOneProjectByIdRow, error) {
@@ -154,7 +144,7 @@ func (s *service) FindById(user_id string, project_id string) (*database.FindOne
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	project_res, err := s.queries.FindOneProjectById(s.ctx, database.FindOneProjectByIdParams{
+	project_res, err := s.repository.FindOneById(database.FindOneProjectByIdParams{
 		ProjectID: project_uuid,
 		UserID: user_uuid,
 	})
@@ -163,11 +153,11 @@ func (s *service) FindById(user_id string, project_id string) (*database.FindOne
 			if strings.Contains(err.Error(), "no rows") {
 				return nil, nil
 			} else {
-				return nil, errors.New("unable to find project")
+				return nil, errutils.Mask(err, "unable to find project")
 			}
 	}
 
-	return &project_res, nil
+	return project_res, nil
 }
 
 func (s *service) FindByIdAndRole(user_id string, project_id string, roles []string) (*database.FindOneProjectByIdAndRoleRow, error) {
@@ -176,33 +166,41 @@ func (s *service) FindByIdAndRole(user_id string, project_id string, roles []str
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	project_res, err := s.queries.FindOneProjectByIdAndRole(s.ctx, database.FindOneProjectByIdAndRoleParams{
+	project_res, err := s.repository.FindOneByIdAndRole(database.FindOneProjectByIdAndRoleParams{
 		ProjectID: project_uuid,
 		UserID: user_uuid,
 	})
 
 	if err != nil {
-			if strings.Contains(err.Error(), "no rows") {
-				return nil, nil
-			} else {
-				return nil, errors.New("unable to find user")
-			}
+		if strings.Contains(err.Error(), "no rows") {
+			return nil, nil
+		} else {
+			return nil, errutils.Mask(err, "unable to find user")
+		}
 	}
 
-	return &project_res, nil
+	return project_res, nil
 }
 
-func (s *service) ListMyProjects(user_id string) ([]database.FindProjectsForUserRow, error) {
+func (s *service) ListMyProjects(user_id string, org_id string) ([]database.FindProjectsForUserRow, error) {
 	user_uuid := pgtype.UUID{}
 	user_uuid.Scan(user_id)
 
-	projectus, err := s.queries.FindProjectsForUser(s.ctx, user_uuid)
+	org_uuid := pgtype.UUID{}
+	if org_id != "" {
+		org_uuid.Scan(org_id)
+	}
+
+	projectus, err := s.repository.FindForUser(database.FindProjectsForUserParams{
+		UserID: user_uuid,
+		OrgID:  org_uuid,
+	})
 	if err != nil {
 		errmsg := err.Error()
 		if strings.Contains(errmsg, "no rows") {
 			return []database.FindProjectsForUserRow{}, nil
 		}
-		return nil, errors.New("unable to find project users, db query failed")
+		return nil, errutils.Mask(err, "unable to find project users, db query failed")
 	}
 
 	return projectus, nil
