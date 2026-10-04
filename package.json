@@ -1,0 +1,10 @@
+{
+  "name": "capybara-cloud",
+  "private": true,
+  "scripts": {
+    "postinstall": "go -C apps/backend mod download && go -C packages/shared-go mod download"
+  },
+  "devDependencies": {
+    "nx": "23.1.3"
+  }
+}

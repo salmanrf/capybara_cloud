@@ -13,13 +13,14 @@ Capybara Cloud is an open source, self-hosted, "Bring your own cloud", AI-assist
 The project started as a monorepo app, with some new modules gradually migrated into their own
 microservices.
 
-To keep everything in one place, the project is distributed in a monorepo, using basic nx-monorepo
-(`./nx` wrapper script, requires Node.js).
+To keep everything in one place, the project is distributed in an Nx monorepo. Nx is pinned as a
+dev dependency in the root `package.json` and run through a globally installed `nx` (see Setup).
 
 Monorepo Structure:
 
 - `apps/` -> Deployable applications (frontends, backends, CLIs)
   - `apps/backend` -> Go API server (chi + pgx)
+  - `apps/frontend` -> Web dashboard (React + TypeScript, Vite, TanStack Router + Query)
 - `packages/` -> Shared libraries consumed by apps or other packages
   - `packages/shared-go` -> Shared Go module: `database` (sqlc generated, gitignored), `deployment`,
     `docker`, `errors`, `logger`, `utils`, `tests`
@@ -37,98 +38,85 @@ The standard structure for each microservice is as follows:
 
 # Setup
 
+Every project is registered with Nx (`apps/backend`, `apps/frontend`, `packages/shared-go`), so all
+commands below run from the repository root with `nx`. List the projects with `nx show projects`,
+and a project's targets with `nx show project <name>`.
+
 ## Installation
 
-```
-cd apps/backend
-go mod download
-go mod tidy
-```
-
-## Database & Migration
-
-Local database runs on Supabase CLI. Migrations live in `apps/backend/supabase/migrations`.
+Requires Node.js, pnpm, Go, the Supabase CLI and sqlc.
 
 ```
-cd apps/backend
-supabase start
-supabase db reset   # applies all migrations
+npm install -g nx            # once per machine: puts `nx` on your PATH
+pnpm install                 # from the repo root: installs Nx, the frontend and the Go modules
 ```
+
+The global `nx` delegates to the version pinned in the root `package.json`, so everyone runs the
+same Nx regardless of which global version they installed. If `nx` reports "Could not find Nx
+modules", run `pnpm install` in the repository root.
+
+The root `pnpm-workspace.yaml` makes `apps/frontend` a workspace package with a single
+`pnpm-lock.yaml` at the root, so always install from the root.
 
 ## Code Generation
 
 Queries are compiled with sqlc into `packages/shared-go/database` (gitignored, must be generated).
 
 ```
-cd apps/backend
-sqlc generate
+nx sqlc backend            # sqlc generate
 ```
+
+`build`, `dev`, `serve` and `test` on the backend (and `test` on shared-go) depend on `sqlc`, so
+Nx runs it first. Its result is cached until `sqlc.yaml`, `sql/` or the migrations change.
 
 ## Build & Run
 
 ```
-cd apps/backend
-./run.sh dev    # or: ./run.sh prod
+nx run-many -t dev -p backend frontend   # run backend and frontend together
+
+nx dev backend             # ./run.sh dev  (debug build, ENV=development)
+nx serve backend           # ./run.sh prod (production build, ENV=production)
+nx build backend           # make dev -> apps/backend/bin/backend
+nx build backend -c production           # make prod
 ```
 
 `run.sh` builds `bin/backend` via `make dev|prod` and runs it with `ENV` set. Logs are written to
 `apps/backend/apps.backend.logs`.
 
-## Environment Variables
-
-Loaded from `apps/backend/.env`.
+## Tests
 
 ```
-# Required
-POSTGRES_URI=
-API_PORT=
-AUTH_JWT_SECRET=
-AUTH_JWT_ISSUER=
-AUTH_JWT_AUDIENCE=
-DOCKER_REGISTRY=
-DOCKER_NAMESPACE=
-# Max formdata size for deployment in bytes
-MAX_DEPLOY_FORM_SIZE=
-# Max deployment bundle size in bytes
-MAX_DEPLOY_BUNDLE_SIZE=
-
-# Optional
-DOCKER_USER=
-DOCKER_ACCESS_TOKEN=
-BASE_ARTIFACT_PATH=
-BASE_BUILD_PATH=
-# Defaults to internal/deployment/templates
-DOCKER_TEMPLATES_DIR=
+nx test backend            # go test ./... in apps/backend
+nx test shared-go          # go test ./... in packages/shared-go (docker e2e needs a Docker daemon)
+nx test frontend           # vitest
+nx run-many -t test        # everything
 ```
 
-# Development Status
+To pass flags through, append them: `nx test backend -- -run TestAuthSignupIntegration`.
 
-**Conventions**
+## Backend
 
-- **Module**: modules in the context of this document refers not to specifically go modules but a general encapsulation of related pieces of code.
+Located in `apps/backend`. Database, migrations and environment variables are documented in
+[`apps/backend/README.md`](apps/backend/README.md).
 
-## Space Module
+```
+pnpm install                 # Nx and the Go modules
+nx supabase-reset backend    # apply migrations to the local database
+nx dev backend               # starts Supabase, runs sqlc, then the API on API_PORT
+```
 
-- User, organization, project, and application CRUD
-- JWT-based authentication
-- Full integration test coverage (TDD)
+## Frontend
 
-## Deployment Module
+```
+nx dev frontend            # http://localhost:5173, proxies /api to the backend
+nx test frontend           # api module tests
+nx typecheck frontend
+nx build frontend          # static output in apps/frontend/dist/
+```
 
-Multi-step deployment module: extract bundle -> build Docker image -> push to registry -> start.
-Deployment instances track each step; a listener service handles step transitions and errors.
+The backend authenticates with a `SameSite=Strict`, `HttpOnly` `sid` cookie, so the frontend must
+reach the API on its own origin. In dev, Vite proxies `/api` to `http://localhost:8888` (override
+with `API_URL`); in production, serve `dist/` and `/api` behind the same host.
 
-## Masbro Worker Module
-
-This is the core of Capybara Cloud, Masbro Workers are the services that actually runs the deployed applications and providing interfaces to them.
-
-Current state: `internal/masbro-worker` runs a deployment instance as a Docker container from the
-pushed image.
-
-## Masbro Manager Module
-
-Not started.
-
-## Observability
-
-Global structured logger (`slog`) in `packages/shared-go/logger`, request logging middleware.
+All backend calls go through `src/api` (`createApi()`), which owns URLs, cookies and the response
+envelope, and throws `ApiError` on failure. Routes under `src/routes/_authed/` require a session.
