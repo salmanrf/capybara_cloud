@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"errors"
 	"log/slog"
 
 	pkgerr "github.com/pkg/errors"
@@ -61,4 +62,41 @@ func argsToAttr(args []any) []slog.Attr {
 type AttrError interface {
 	error
 	Attrs() []slog.Attr
+}
+
+type ErrMasked struct {
+	msg   string
+	cause error
+}
+
+func (e *ErrMasked) Error() string {
+	return e.msg
+}
+
+func (e *ErrMasked) Unwrap() error {
+	return e.cause
+}
+
+func (e *ErrMasked) Attrs() []slog.Attr {
+	return []slog.Attr{
+		slog.String("cause", e.cause.Error()),
+	}
+}
+
+func Mask(cause error, msg string) error {
+	if cause == nil {
+		return pkgerr.New(msg)
+	}
+
+	if masked, ok := errors.AsType[*ErrMasked](cause); ok {
+		cause = masked.cause
+	}
+	if _, ok := errors.AsType[StackTracer](cause); !ok {
+		cause = pkgerr.WithStack(cause)
+	}
+
+	return &ErrMasked{
+		msg:   msg,
+		cause: cause,
+	}
 }

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,15 +31,24 @@ func create_response[T any](data *T, message string) *BaseResponse[T] {
 	}
 }
 
-func ResponseWithSuccess[T any](w http.ResponseWriter, status int, data *T, message string) error {
-	encoder := json.NewEncoder(w)
-	
+func write_json(w http.ResponseWriter, status int, body any) error {
+	buf := bytes.Buffer{}
+	if err := json.NewEncoder(&buf).Encode(body); err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Header().Add("Content-Type", "application/json")
 
-	response_body := create_response(data, "Success")
+	_, err := w.Write(buf.Bytes())
 
-	if err := encoder.Encode(response_body); err != nil {
+	return err
+}
+
+func ResponseWithSuccess[T any](w http.ResponseWriter, status int, data *T, message string) error {
+	response_body := create_response(data, message)
+
+	if err := write_json(w, status, response_body); err != nil {
 		ResponseWithError(w, http.StatusInternalServerError, nil, "")
 		return err
 	}
@@ -47,11 +57,6 @@ func ResponseWithSuccess[T any](w http.ResponseWriter, status int, data *T, mess
 }
 
 func ResponseWithError(w http.ResponseWriter, status int, data map[string]any, message string) error {
-	encoder := json.NewEncoder(w)
-	
-	w.WriteHeader(status)
-	w.Header().Add("Content-Type", "application/json")
-
 	response_body := create_response(&data, message)
 	response_body.Success = false
 	response_body.ErrorDetails = &ErrorDetails{
@@ -68,11 +73,13 @@ func ResponseWithError(w http.ResponseWriter, status int, data map[string]any, m
 		response_body.ErrorDetails.Context = data
 	} 
 
-	if err := encoder.Encode(response_body); err != nil {
+	if err := write_json(w, status, response_body); err != nil {
 		fmt.Println("Error encoding error response")
-		
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
 		w.Write([]byte(DefaultJsonError))
-		
+
 		return err
 	}
 
